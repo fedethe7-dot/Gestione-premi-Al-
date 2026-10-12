@@ -1,0 +1,24 @@
+{
+  "name": "gestionale-premi",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Gestionale trasferimenti e resi premi tra punti vendita (frontend GitHub Pages + backend Google Apps Script)",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "emulatore": "node emulatore/server.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test test/backend.test.mjs test/logica.test.ts"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-icons": "5.7.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
+  }
+}

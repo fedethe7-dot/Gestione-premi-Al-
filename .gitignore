@@ -1,0 +1,18 @@
+# Dipendenze
+node_modules/
+
+# Dati locali dell'emulatore di sviluppo (MAI su GitHub)
+emulatore/dati/
+
+# Backup e file con dati reali: non pubblicarli
+*.json.bak
+backup-gestionale-premi_*.json
+*.xlsx
+dati-reali/
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+.env
