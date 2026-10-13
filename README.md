@@ -333,7 +333,7 @@ Non è necessario un file `.env`: il programma non contiene segreti; indirizzo e
 Se il Foglio è su un account Google **aziendale** e nella distribuzione non compare l'accesso **"Chiunque"** (solo "Chiunque in *dominio*"), la pagina su GitHub Pages non riesce a collegarsi ("Impossibile contattare il server"). In questo caso si usa la **versione integrata**, servita direttamente da Apps Script:
 
 1. In Apps Script sostituisci `Code.gs` con l'ultima versione di `apps-script/Code.gs`.
-2. **＋ › HTML**, chiama il file `Index` e incolla il contenuto di `apps-script/Index.html`. Salva.
+2. **＋ › HTML**, chiama il file `Index` e incolla il contenuto di `apps-script/Index.html` (è una pagina piccola: il programma vero viene caricato da GitHub Pages, quindi GitHub Pages deve restare attivo e gli aggiornamenti arrivano da soli). Salva.
 3. **Distribuisci › Gestisci distribuzioni › ✏️**: *Esegui come* **Me**, *Chi ha accesso* **Chiunque in *dominio***, *Versione* **Nuova versione** › Distribuisci.
 4. Apri l'indirizzo `/exec`: si apre direttamente il gestionale, senza token né impostazioni di collegamento.
 

@@ -1,6 +1,6 @@
 /**
- * Crea apps-script/Index.html: l'applicazione già compilata (docs/app.js + docs/app.css)
- * in un unico file da aggiungere al progetto Apps Script.
+ * Crea apps-script/Index.html: la pagina da aggiungere al progetto Apps Script, che carica
+ * l'applicazione già compilata (docs/app.js + docs/app.css) da GitHub Pages.
  *
  * Serve per gli account Google aziendali che non permettono l'accesso "Chiunque" alla web app:
  * la pagina viene servita direttamente da Apps Script (doGet) e parla con il Foglio tramite
@@ -15,13 +15,6 @@ const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const DOCS = path.join(ROOT, 'docs');
 const OUT = path.join(ROOT, 'apps-script', 'Index.html');
 
-const css = fs.readFileSync(path.join(DOCS, 'app.css'), 'utf8');
-const js = fs.readFileSync(path.join(DOCS, 'app.js'), 'utf8');
-if (/\bimport\.meta\b|^\s*(import|export)\s/m.test(js)) throw new Error('app.js usa import/export: non può essere incluso come script normale.');
-
-// Evita che "</script" o "</style" dentro il codice chiudano il tag in anticipo.
-const safeJs = js.replace(/<\/script/gi, '<\\/script');
-const safeCss = css.replace(/<\/style/gi, '<\\/style');
 
 /* Adattatore: l'app chiama fetch(indirizzo, POST); qui le chiamate vengono girate a google.script.run. */
 const adattatore = `
@@ -75,19 +68,44 @@ const cssExtra = `
 *:has(> label[for="cfg-url"]), *:has(> label[for="cfg-token"]) { display: none !important; }
 `;
 
+/*
+ * Il codice dell'app NON viene incollato in Apps Script (file enorme, che l'editor rovina):
+ * Index.html è una pagina piccola che carica app.js e app.css da GitHub Pages.
+ * Così, ogni volta che l'app si aggiorna su GitHub, la versione integrata si aggiorna da sola.
+ */
+const PAGES = 'https://fedethe7-dot.github.io/Gestione-premi-Al-/';
+const caricatore = `
+(function () {
+  var base = '${PAGES}';
+  var v = Date.now().toString(36);
+  var mostraErrore = function (testo) {
+    var r = document.getElementById('root');
+    if (r && !r.firstChild) r.innerHTML = '<div style="font:15px system-ui;padding:24px;color:#991b1b">' + testo + '</div>';
+  };
+  window.addEventListener('error', function (e) { mostraErrore('Errore: ' + (e.message || 'sconosciuto')); });
+  var css = document.createElement('link');
+  css.rel = 'stylesheet';
+  css.href = base + 'app.css?v=' + v;
+  document.head.appendChild(css);
+  var js = document.createElement('script');
+  js.type = 'module';
+  js.src = base + 'app.js?v=' + v;
+  js.onerror = function () { mostraErrore('Impossibile caricare il programma da ' + base + ' (controlla che GitHub Pages sia attivo).'); };
+  document.body.appendChild(js);
+})();
+`;
+
 const html = `<!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
-<style>${safeCss}${cssExtra}</style>
+<style>${cssExtra}</style>
 </head>
 <body>
 <div id="root"></div>
 <script>${adattatore}</script>
-<script>(function () {
-${safeJs}
-})();</script>
+<script>${caricatore}</script>
 </body>
 </html>
 `;
