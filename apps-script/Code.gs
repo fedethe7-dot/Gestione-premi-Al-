@@ -8,6 +8,11 @@
  * Poi: Distribuisci > Nuova distribuzione > App web
  *      (Esegui come: Me — Chi ha accesso: Chiunque).
  *
+ * Account aziendali (Google Workspace) che non permettono l'accesso "Chiunque":
+ * aggiungere al progetto anche il file HTML "Index" (apps-script/Index.html) e
+ * distribuire con accesso "Chiunque nel dominio". In quel caso l'applicazione si
+ * apre direttamente dall'indirizzo /exec e non servono token né impostazioni.
+ *
  * Sicurezza: ogni richiesta deve contenere il token API salvato nelle
  * Proprietà dello script (generato da `setup`, mai scritto nel codice).
  */
@@ -63,7 +68,25 @@ var MAX_QTA = 1000000;
  * ==================================================================== */
 
 function doGet() {
+  // Versione integrata: se nel progetto c'è il file HTML "Index", l'applicazione si apre da qui.
+  var pagina = null;
+  try { pagina = HtmlService.createHtmlOutputFromFile('Index'); } catch (e) { pagina = null; }
+  if (pagina) {
+    return pagina
+      .setTitle(APP_NAME)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+  }
   return json_({ ok: true, data: { servizio: APP_NAME, schema: SCHEMA_VERSION, messaggio: 'Servizio attivo. Usa l\'applicazione per accedere ai dati.' } });
+}
+
+/**
+ * Chiamata dalla versione integrata (pagina servita da doGet) tramite google.script.run.
+ * Chi apre la pagina è già autorizzato da Google (accesso della distribuzione), quindi
+ * il token API non serve. Restituisce il JSON come testo.
+ */
+function api(raw) {
+  return JSON.stringify(handleRequest_(raw, true));
 }
 
 function doPost(e) {
@@ -104,14 +127,16 @@ var ACTIONS = {
   restoreBackup: { write: true, fn: restoreBackup_ }
 };
 
-function handleRequest_(raw) {
+function handleRequest_(raw, integrata) {
   var lock = null;
   try {
     var req;
     try { req = JSON.parse(raw || '{}'); } catch (e) { fail_('RICHIESTA', 'Richiesta non valida (JSON).'); }
-    var token = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
-    if (!token) fail_('CONFIG', 'Token API non configurato: esegui la funzione "setup" nell\'editor Apps Script.');
-    if (!req.token || String(req.token) !== token) fail_('AUTH', 'Token API non valido. Controlla le Impostazioni dell\'applicazione.');
+    if (!integrata) {
+      var token = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
+      if (!token) fail_('CONFIG', 'Token API non configurato: esegui la funzione "setup" nell\'editor Apps Script.');
+      if (!req.token || String(req.token) !== token) fail_('AUTH', 'Token API non valido. Controlla le Impostazioni dell\'applicazione.');
+    }
     var action = ACTIONS[req.action];
     if (!action) fail_('RICHIESTA', 'Azione sconosciuta: ' + req.action);
     var ctx = { operatore: str_(req.operatore, 60) || 'non indicato', cache: {} };

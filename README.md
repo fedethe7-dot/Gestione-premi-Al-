@@ -325,3 +325,16 @@ Non è necessario un file `.env`: il programma non contiene segreti; indirizzo e
 * **Giacenze di magazzino**: non calcolate, per scelta (gestionale dei movimenti).
 * **Data del movimento e stagione**: il programma non impedisce di registrare un trasferimento con una data fuori dal periodo della stagione; il catalogo va scelto esplicitamente ed è sempre visibile nel modulo.
 * **Volumi**: pensato per qualche decina di migliaia di operazioni. L'app carica tutti i dati all'apertura; con volumi molto più grandi conviene passare a un database centralizzato (la struttura delle tabelle è già quella relazionale da riportare, ad esempio, in PostgreSQL).
+
+---
+
+## Account Google aziendale (accesso solo dal dominio)
+
+Se il Foglio è su un account Google **aziendale** e nella distribuzione non compare l'accesso **"Chiunque"** (solo "Chiunque in *dominio*"), la pagina su GitHub Pages non riesce a collegarsi ("Impossibile contattare il server"). In questo caso si usa la **versione integrata**, servita direttamente da Apps Script:
+
+1. In Apps Script sostituisci `Code.gs` con l'ultima versione di `apps-script/Code.gs`.
+2. **＋ › HTML**, chiama il file `Index` e incolla il contenuto di `apps-script/Index.html`. Salva.
+3. **Distribuisci › Gestisci distribuzioni › ✏️**: *Esegui come* **Me**, *Chi ha accesso* **Chiunque in *dominio***, *Versione* **Nuova versione** › Distribuisci.
+4. Apri l'indirizzo `/exec`: si apre direttamente il gestionale, senza token né impostazioni di collegamento.
+
+`apps-script/Index.html` si rigenera con `npm run build && npm run build:gas`.
