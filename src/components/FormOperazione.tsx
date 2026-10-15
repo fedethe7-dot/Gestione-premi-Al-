@@ -132,7 +132,6 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       if (!v.pdv_destinazione_id) e.pdv_destinazione_id = 'Scegli il PDV di destinazione.';
       if (v.pdv_origine_id && v.pdv_origine_id === v.pdv_destinazione_id) e.pdv_destinazione_id = 'Origine e destinazione non possono coincidere.';
     } else if (!v.pdv_id) e.pdv_id = 'Scegli il punto vendita.';
-    if (tipo === 'assegnazione' && !v.prenotazione.trim()) e.prenotazione = 'Inserisci il numero di prenotazione.';
     setErrori(e);
     const primo = Object.keys(e)[0];
     if (primo) formRef.current?.querySelector<HTMLElement>(`#op-${primo}`)?.focus();
@@ -146,7 +145,10 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       return dati!.trasferimenti.find((t) => t.stato === 'valido' && t.data === v.data && t.premio_id === v.premio_id &&
         t.pdv_origine_id === v.pdv_origine_id && t.pdv_destinazione_id === v.pdv_destinazione_id && t.quantita === String(Number(v.quantita)));
     }
-    if (tipo === 'assegnazione') return null;
+    if (tipo === 'assegnazione') {
+      return (dati!.assegnazioni ?? []).find((x) => x.stato === 'valido' && x.data === v.data && x.premio_id === v.premio_id && x.pdv_id === v.pdv_id &&
+        x.quantita === String(Number(v.quantita)) && (x.prenotazione ?? '').trim() === v.prenotazione.trim());
+    }
     return dati!.resi.find((r) => r.stato === 'valido' && r.data === v.data && r.premio_id === v.premio_id && r.pdv_id === v.pdv_id && r.quantita === String(Number(v.quantita)));
   };
 
@@ -154,6 +156,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
   const prenotazioneUsata = () => {
     if (tipo !== 'assegnazione') return null;
     const n = v.prenotazione.trim().toLowerCase();
+    if (!n) return null;
     return (dati!.assegnazioni ?? []).find((a) => a.stato === 'valido' && a.id !== esistente?.id && (a.prenotazione ?? '').trim().toLowerCase() === n) ?? null;
   };
 
@@ -280,7 +283,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
               <Combobox id="op-pdv_id" opzioni={opzioniPdv} valore={v.pdv_id} onChange={(id) => set('pdv_id', id)} errore={!!errori.pdv_id}
                 inputRef={primoRef} autoFocus={!modifica} vuoto="Nessun PDV attivo trovato" />
             </Campo>
-            <Campo etichetta="N. prenotazione" per="op-prenotazione" obbligatorio errore={errori.prenotazione} className="col-span-4 md:col-span-3">
+            <Campo etichetta="N. prenotazione (facoltativo)" per="op-prenotazione" errore={errori.prenotazione} className="col-span-4 md:col-span-3">
               <input id="op-prenotazione" className={`input font-mono ${errori.prenotazione ? 'input-errore' : ''}`} value={v.prenotazione} maxLength={60} autoComplete="off"
                 onChange={(e) => set('prenotazione', e.target.value)} />
             </Campo>

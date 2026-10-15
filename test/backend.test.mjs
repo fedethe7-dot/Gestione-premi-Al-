@@ -218,21 +218,22 @@ test('assegnazioni: causali iniziali e magazzino di partenza', () => {
   assert.deepEqual(d.causali.filter((c) => c.tipo === 'assegnazione').map((c) => c.descrizione), ['Prenotazione cliente', 'Altra causale']);
 });
 
-test('assegnazione valida, validazioni e numero di prenotazione obbligatorio', () => {
+test('assegnazione valida, validazioni e numero di prenotazione facoltativo', () => {
   const a = ok(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '2', prenotazione: ' PR-0042 ', causale: 'prenotazione cliente', riferimento: 'DDT 7' }));
   assert.match(a.id, /^AS-\d{6}$/);
   assert.equal(a.pdv_nome, P2.nome);
   assert.equal(a.prenotazione, 'PR-0042');
   assert.equal(a.causale, 'Prenotazione cliente');
   assert.equal(a.stato, 'valido');
-  const e = ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: '' }), 'VALIDAZIONE');
-  assert.ok(e.details.campi.prenotazione);
+  const senza = ok(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: '' }));
+  assert.equal(senza.prenotazione, '');
+  ok(call('annullaOperazione', { tipo: 'assegnazione', id: senza.id, motivo: 'prova senza prenotazione' }));
   ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: '', quantita: '1', prenotazione: 'X' }), 'VALIDAZIONE');
   ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C2, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: 'X' }), 'VALIDAZIONE');
   ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '0', prenotazione: 'X' }), 'VALIDAZIONE');
   ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: 'X', causale: 'Richiesta del PDV' }), 'VALIDAZIONE');
   const d = ok(call('getAll'));
-  assert.equal(d.assegnazioni.length, 1);
+  assert.equal(d.assegnazioni.length, 2);
   assert.equal(d.trasferimenti.some((t) => t.id === a.id) || d.resi.some((r) => r.id === a.id), false, 'le assegnazioni non finiscono tra trasferimenti o resi');
 });
 
@@ -262,9 +263,9 @@ test('nuova causale per le assegnazioni', () => {
 
 test('backup e ripristino includono le assegnazioni; vecchi backup senza assegnazioni restano validi', () => {
   const backup = ok(call('exportBackup'));
-  assert.equal(backup.fogli.Assegnazioni.righe.length, 2);
+  assert.equal(backup.fogli.Assegnazioni.righe.length, 3);
   const res = ok(call('restoreBackup', { backup: JSON.parse(JSON.stringify(backup)), conferma: 'RIPRISTINA' }));
-  assert.equal(res.conteggi.Assegnazioni, 2);
+  assert.equal(res.conteggi.Assegnazioni, 3);
   const vecchio = JSON.parse(JSON.stringify(backup));
   delete vecchio.fogli.Assegnazioni;
   const r2 = ok(call('restoreBackup', { backup: vecchio, conferma: 'RIPRISTINA' }));

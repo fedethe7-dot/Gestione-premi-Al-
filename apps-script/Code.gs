@@ -874,8 +874,7 @@ function saveAssegnazione_(p, ctx) {
   var e = {};
   var c = commonOp_(p, ctx, prev, e);
   var pdv = entita_(cached_(ctx, 'PDV'), str_(p.pdv_id, 20), 'Punto vendita di destinazione', prev ? prev.pdv_id : null, e, 'pdv_id');
-  var prenotazione = str_(p.prenotazione, 60);
-  if (!prenotazione) e.prenotazione = 'Il numero di prenotazione è obbligatorio.';
+  var prenotazione = str_(p.prenotazione, 60); // facoltativo
   check_(e);
   var causale = causaleValida_(ctx, 'assegnazione', str_(p.causale, 100), prev ? prev.causale : '');
   var now = nowIso_();

@@ -23,7 +23,7 @@ export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; 
         <Intestazione titolo={tipo === 'trasferimento' ? 'Nuovo trasferimento' : tipo === 'reso' ? 'Nuovo reso' : 'Nuova assegnazione'}
           sottotitolo={tipo === 'trasferimento' ? 'Premi spostati da un punto vendita a un altro.'
             : tipo === 'reso' ? 'Premi resi da un punto vendita. Non modifica i trasferimenti già registrati.'
-              : `Premi assegnati dal ${magazzino} a un punto vendita, con il numero di prenotazione.`} />
+              : `Premi assegnati dal ${magazzino} a un punto vendita, con l'eventuale numero di prenotazione.`} />
         {tipo === 'assegnazione' && !assegnazioniAttive && (
           <p className="mb-3 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900" role="status">
             <LuTriangleAlert className="mt-0.5 shrink-0" />
