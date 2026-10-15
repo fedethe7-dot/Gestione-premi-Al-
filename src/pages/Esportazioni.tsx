@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { LuCloudUpload, LuDatabaseBackup, LuDownload, LuExternalLink, LuFileDown, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
 import { FiltroPeriodo, Intestazione, scaricaCsv, scaricaTesto, SelettoreCatalogo, type Periodo } from '../components/comuni.tsx';
 import { messaggioErrore } from '../lib/api.ts';
-import { colonnePdv, colonnePremi, colonneResi, colonneStatPdv, colonneStatPremio, colonneStorico, colonneTrasferimenti } from '../lib/esportazioni.ts';
+import { colonneAssegnazioni, colonnePdv, colonnePremi, colonneResi, colonneStatPdv, colonneStatPremio, colonneStorico, colonneTrasferimenti } from '../lib/esportazioni.ts';
 import { dataOraIt, num } from '../lib/format.ts';
 import { confrontaOp } from '../lib/operazioni.ts';
 import { filtraValide, statPerPdv, statPerPremio } from '../lib/statistiche.ts';
@@ -29,6 +29,7 @@ export function PaginaEsportazioni() {
   const anag = useMemo(() => new Map(dati!.pdv.map((p) => [p.id, { codice: p.codice, nome: p.nome }])), [dati]);
   const trasf = ops.filter((o) => o.tipo === 'trasferimento');
   const resi = ops.filter((o) => o.tipo === 'reso');
+  const assegnazioni = ops.filter((o) => o.tipo === 'assegnazione');
   const premi = dati!.premi.filter((p) => !catPremi || p.catalogo_id === catPremi)
     .sort((a, b) => a.catalogo_id.localeCompare(b.catalogo_id) || (a.codice || a.descrizione).localeCompare(b.codice || b.descrizione, 'it', { numeric: true }));
   const statPdv = useMemo(() => statPerPdv(valide, anag).sort((a, b) => a.codice.localeCompare(b.codice, 'it', { numeric: true })), [valide, anag]);
@@ -74,7 +75,7 @@ export function PaginaEsportazioni() {
           <p>Backup del <b>{dataOraIt(b.creato_il)}</b> ({b.nome_database}):</p>
           <ul className="list-disc pl-5 text-sm">
             <li>{num(conteggio('PDV'))} punti vendita, {num(conteggio('Premi'))} premi, {num(conteggio('Cataloghi'))} cataloghi</li>
-            <li>{num(conteggio('Trasferimenti'))} trasferimenti, {num(conteggio('Resi'))} resi</li>
+            <li>{num(conteggio('Trasferimenti'))} trasferimenti, {num(conteggio('Resi'))} resi, {num(conteggio('Assegnazioni'))} assegnazioni</li>
           </ul>
           <p className="flex gap-2 rounded-md bg-red-50 p-2 text-red-900"><LuTriangleAlert className="mt-0.5 shrink-0" />
             Tutti i dati attuali verranno sostituiti da quelli del backup. Prima del ripristino viene creata in automatico una copia di sicurezza dello stato attuale su Google Drive.</p>
@@ -87,7 +88,7 @@ export function PaginaEsportazioni() {
       const r = await api<{ conteggi: Record<string, number>; copia_sicurezza: { nome: string; url: string } }>('restoreBackup', { backup: b, conferma: 'RIPRISTINA' });
       setUltimaCopia(r.copia_sicurezza);
       await ricarica();
-      avvisa('successo', `Backup ripristinato: ${num(r.conteggi.Trasferimenti ?? 0)} trasferimenti e ${num(r.conteggi.Resi ?? 0)} resi.`);
+      avvisa('successo', `Backup ripristinato: ${num(r.conteggi.Trasferimenti ?? 0)} trasferimenti, ${num(r.conteggi.Resi ?? 0)} resi e ${num(r.conteggi.Assegnazioni ?? 0)} assegnazioni.`);
     } catch (e) { avvisa('errore', messaggioErrore(e)); } finally { setInCorso(''); }
   };
 
@@ -109,7 +110,8 @@ export function PaginaEsportazioni() {
         <div className="grid gap-2 md:grid-cols-2">
           <RigaExport titolo="Trasferimenti" n={trasf.length} onClick={() => esporta(scaricaCsv('trasferimenti', trasf, colonneTrasferimenti(mappe.cataloghi), sep))} />
           <RigaExport titolo="Resi" n={resi.length} onClick={() => esporta(scaricaCsv('resi', resi, colonneResi(mappe.cataloghi), sep))} />
-          <RigaExport titolo="Storico completo (trasferimenti e resi)" n={ops.length} onClick={() => esporta(scaricaCsv('storico', ops, colonneStorico(mappe.cataloghi), sep))} />
+          <RigaExport titolo="Assegnazioni dal magazzino" n={assegnazioni.length} onClick={() => esporta(scaricaCsv('assegnazioni', assegnazioni, colonneAssegnazioni(mappe.cataloghi), sep))} />
+          <RigaExport titolo="Storico completo (trasferimenti, resi e assegnazioni)" n={ops.length} onClick={() => esporta(scaricaCsv('storico', ops, colonneStorico(mappe.cataloghi), sep))} />
           <RigaExport titolo="Statistiche per PDV" n={statPdv.length} nota="aggregate, solo operazioni valide" onClick={() => esporta(scaricaCsv('statistiche-pdv', statPdv, colonneStatPdv, sep))} />
           <RigaExport titolo="Statistiche per premio" n={statPremi.length} nota="aggregate, solo operazioni valide" onClick={() => esporta(scaricaCsv('statistiche-premi', statPremi, colonneStatPremio(mappe.cataloghi, false), sep))} />
           <RigaExport titolo="Punti vendita" n={dati!.pdv.length} nota="intero archivio" onClick={() => esporta(scaricaCsv('punti-vendita', [...dati!.pdv].sort((a, b) => a.codice.localeCompare(b.codice, 'it', { numeric: true })), colonnePdv, sep))} />
@@ -122,7 +124,7 @@ export function PaginaEsportazioni() {
 
       <section className="card p-5">
         <h2 className="text-lg font-semibold">Backup e ripristino</h2>
-        <p className="mb-4 text-slate-600">Il backup comprende <b>tutte</b> le tabelle: cataloghi, premi, PDV, causali, trasferimenti, resi, registro delle modifiche e contatori.</p>
+        <p className="mb-4 text-slate-600">Il backup comprende <b>tutte</b> le tabelle: cataloghi, premi, PDV, causali, trasferimenti, resi, assegnazioni, registro delle modifiche e contatori.</p>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-md border border-slate-200 p-4">
             <h3 className="flex items-center gap-2 font-semibold"><LuCloudUpload /> Copia su Google Drive</h3>

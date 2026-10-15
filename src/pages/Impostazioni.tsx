@@ -4,7 +4,7 @@ import { AttivoBadge, Campo, Intestazione } from '../components/comuni.tsx';
 import { Modale } from '../components/Modale.tsx';
 import { chiama, messaggioErrore } from '../lib/api.ts';
 import { cancellaConfig, type Config } from '../lib/config.ts';
-import type { Causale } from '../lib/types.ts';
+import type { Causale, TipoOperazione } from '../lib/types.ts';
 import { useDati } from '../state/dati.tsx';
 import { useUi } from '../state/ui.tsx';
 
@@ -85,6 +85,7 @@ export function PaginaImpostazioni() {
           <div className="grid gap-5 md:grid-cols-2">
             <ElencoCausali tipo="trasferimento" elenco={causali('trasferimento', false)} />
             <ElencoCausali tipo="reso" elenco={causali('reso', false)} />
+            <ElencoCausali tipo="assegnazione" elenco={causali('assegnazione', false)} />
           </div>
         </section>
       )}
@@ -94,7 +95,7 @@ export function PaginaImpostazioni() {
         <dl className="grid grid-cols-[12rem_1fr] gap-y-1 text-slate-700">
           <dt className="text-slate-500">Versione programma</dt><dd>{__APP_VERSION__}</dd>
           {dati && <><dt className="text-slate-500">Database</dt><dd>{dati.nome_database} (schema {dati.schema})</dd></>}
-          {dati && <><dt className="text-slate-500">Contenuto</dt><dd>{dati.pdv.length} PDV, {dati.premi.length} premi, {dati.trasferimenti.length} trasferimenti, {dati.resi.length} resi</dd></>}
+          {dati && <><dt className="text-slate-500">Contenuto</dt><dd>{dati.pdv.length} PDV, {dati.premi.length} premi, {dati.trasferimenti.length} trasferimenti, {dati.resi.length} resi, {dati.assegnazioni?.length ?? 0} assegnazioni</dd></>}
         </dl>
         <button className="btn-secondario mt-4" onClick={async () => {
           const ok = await conferma({ titolo: 'Scollegare questo browser?', messaggio: 'Indirizzo e token verranno rimossi da questo browser. I dati nel Foglio Google non vengono toccati.', etichetta: 'Scollega', pericolo: true });
@@ -105,7 +106,9 @@ export function PaginaImpostazioni() {
   );
 }
 
-function ElencoCausali({ tipo, elenco }: { tipo: 'trasferimento' | 'reso'; elenco: Causale[] }) {
+const TITOLO_CAUSALI: Record<TipoOperazione, string> = { trasferimento: 'Causali dei trasferimenti', reso: 'Causali dei resi', assegnazione: 'Causali delle assegnazioni' };
+
+function ElencoCausali({ tipo, elenco }: { tipo: TipoOperazione; elenco: Causale[] }) {
   const { api, aggiorna } = useDati();
   const { avvisa } = useUi();
   const [modifica, setModifica] = useState<Partial<Causale> | null>(null);
@@ -125,7 +128,7 @@ function ElencoCausali({ tipo, elenco }: { tipo: 'trasferimento' | 'reso'; elenc
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-semibold">{tipo === 'trasferimento' ? 'Causali dei trasferimenti' : 'Causali dei resi'}</h3>
+        <h3 className="font-semibold">{TITOLO_CAUSALI[tipo]}</h3>
         <button className="btn-secondario px-2 py-1 text-xs" onClick={() => setModifica({ descrizione: '', attivo: 'SI' })}><LuPlus /> Aggiungi</button>
       </div>
       <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">

@@ -2,7 +2,7 @@
 
 export type SiNo = 'SI' | 'NO';
 export type Stato = 'valido' | 'annullato';
-export type TipoOperazione = 'trasferimento' | 'reso';
+export type TipoOperazione = 'trasferimento' | 'reso' | 'assegnazione';
 
 export interface Catalogo {
   id: string; codice: string; nome: string; data_inizio: string; data_fine: string;
@@ -41,9 +41,17 @@ export interface Reso extends OpBase {
   pdv_id: string; pdv_codice: string; pdv_nome: string; trasferimento_id: string;
 }
 
+/** Premi che partono dal magazzino (via Svezia 04) verso un punto vendita. */
+export interface Assegnazione extends OpBase {
+  pdv_id: string; pdv_codice: string; pdv_nome: string; prenotazione: string;
+}
+
 export interface DatiCompleti {
   cataloghi: Catalogo[]; premi: Premio[]; pdv: Pdv[]; causali: Causale[];
   trasferimenti: Trasferimento[]; resi: Reso[];
+  /** Assente se lo script Apps Script non è ancora stato aggiornato alla versione con le assegnazioni. */
+  assegnazioni?: Assegnazione[];
+  magazzino?: string;
   schema: number; nome_database: string; ora: string;
 }
 
@@ -56,8 +64,9 @@ export interface EsitoImport {
 }
 
 /**
- * Operazione unificata (trasferimento o reso) usata da storico, statistiche ed esportazioni.
+ * Operazione unificata (trasferimento, reso o assegnazione) usata da storico, statistiche ed esportazioni.
  * Per i resi `pdvOrigine*`/`pdvDest*` sono vuoti e il PDV interessato è in `pdvReso*`.
+ * Per le assegnazioni l'origine è il magazzino (solo nome, senza id) e il PDV che riceve è in `pdvDest*`.
  */
 export interface Operazione {
   tipo: TipoOperazione;
@@ -67,7 +76,7 @@ export interface Operazione {
   pdvDestId: string; pdvDestCodice: string; pdvDestNome: string;
   pdvResoId: string; pdvResoCodice: string; pdvResoNome: string;
   quantita: number; causale: string; riferimento: string; note: string; stato: Stato;
-  trasferimentoId: string;
+  trasferimentoId: string; prenotazione: string;
   creatoIl: string; creatoDa: string; modificatoIl: string; modificatoDa: string;
   annullatoIl: string; motivoAnnullamento: string;
 }

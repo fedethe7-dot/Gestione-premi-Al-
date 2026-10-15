@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  LuArrowRightLeft, LuChartColumn, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuRefreshCw, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
+  LuArrowRightLeft, LuChartColumn, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuPackagePlus, LuRefreshCw, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
 } from 'react-icons/lu';
 import { Rotella } from './components/comuni.tsx';
 import { dataOraIt } from './lib/format.ts';
@@ -22,6 +22,7 @@ const VOCI = [
   { path: '', titolo: 'Dashboard', icona: LuLayoutDashboard },
   { path: 'trasferimento', titolo: 'Nuovo trasferimento', icona: LuArrowRightLeft },
   { path: 'reso', titolo: 'Nuovo reso', icona: LuUndo2 },
+  { path: 'assegnazione', titolo: 'Nuova assegnazione', icona: LuPackagePlus },
   { path: 'storico', titolo: 'Storico operazioni', icona: LuHistory },
   { path: 'pdv', titolo: 'Punti vendita', icona: LuStore },
   { path: 'cataloghi', titolo: 'Cataloghi premi', icona: LuGift },
@@ -38,9 +39,12 @@ function App() {
   useEffect(() => {
     const onHash = () => { setRotta(leggiRotta()); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', onHash);
-    // Alt+1…9: navigazione rapida tra le sezioni.
+    // Alt+1…9 e Alt+0 (decima voce): navigazione rapida tra le sezioni.
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) { e.preventDefault(); vai(VOCI[Number(e.key) - 1].path); }
+      if (e.altKey && !e.ctrlKey && /^[0-9]$/.test(e.key)) {
+        const voce = VOCI[e.key === '0' ? 9 : Number(e.key) - 1];
+        if (voce) { e.preventDefault(); vai(voce.path); }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('hashchange', onHash); window.removeEventListener('keydown', onKey); };
@@ -68,6 +72,7 @@ function App() {
     switch (rotta.path) {
       case 'trasferimento': contenuto = <PaginaNuovaOperazione key="t" tipo="trasferimento" />; break;
       case 'reso': contenuto = <PaginaNuovaOperazione key="r" tipo="reso" params={rotta.params} />; break;
+      case 'assegnazione': contenuto = <PaginaNuovaOperazione key="a" tipo="assegnazione" />; break;
       case 'storico': contenuto = <PaginaStorico params={rotta.params} />; break;
       case 'pdv': contenuto = <PaginaPdv />; break;
       case 'cataloghi': contenuto = <PaginaCataloghi />; break;
@@ -84,7 +89,7 @@ function App() {
           <div className="grid h-8 w-8 place-items-center rounded-md bg-brand-600 text-white"><LuArrowRightLeft /></div>
           <div className="leading-tight">
             <div className="font-semibold">Gestionale premi</div>
-            <div className="text-xs text-slate-500">Trasferimenti e resi</div>
+            <div className="text-xs text-slate-500">Movimenti dei premi</div>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Menu principale">
@@ -94,7 +99,7 @@ function App() {
             return (
               <a key={v.path} href={'#/' + v.path} aria-current={att ? 'page' : undefined}
                 className={`mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 ${att ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-700 hover:bg-slate-100'} ${!configurato && v.path !== 'impostazioni' ? 'pointer-events-none opacity-40' : ''}`}
-                title={`Alt+${i + 1}`}>
+                title={i < 10 ? `Alt+${(i + 1) % 10}` : undefined}>
                 <Icona className="shrink-0" size={17} aria-hidden />
                 <span className="flex-1">{v.titolo}</span>
               </a>

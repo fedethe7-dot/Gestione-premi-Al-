@@ -132,3 +132,21 @@ test('CSV in lettura: separatore automatico e codifica Windows-1252', () => {
   assert.equal(decodifica(utf8.buffer as ArrayBuffer).testo, 'città;x');
   assert.deepEqual(leggiCsv('a;b\r\n\r\n1;2\r\n;\r\n'), [['a', 'b'], ['1', '2']], 'righe vuote ignorate');
 });
+
+test('assegnazioni: unite allo storico ma escluse dalle statistiche tra PDV', async () => {
+  const { daAssegnazione, descriviPdv, nomeTipo } = await import('../src/lib/operazioni.ts');
+  const as = { ...base, id: 'A1', data: '2026-10-03', catalogo_id: 'C1', premio_id: 'P1', premio_descrizione: 'P1', pdv_id: 'B', pdv_codice: 'B', pdv_nome: 'B', quantita: '6', prenotazione: 'PR1', stato: 'valido' as const };
+  const tutte = unisci([tr('T9', '2026-10-03', 'C1', 'P1', 'A', 'B', 1)], [], [as]);
+  assert.equal(tutte.length, 2);
+  const o = daAssegnazione(as);
+  assert.equal(o.tipo, 'assegnazione');
+  assert.equal(o.pdvOrigineNome, 'Magazzino via Svezia 04');
+  assert.equal(o.pdvDestId, 'B');
+  assert.equal(o.prenotazione, 'PR1');
+  assert.equal(descriviPdv(o), 'Magazzino via Svezia 04 → B');
+  assert.equal(nomeTipo('assegnazione', true), 'Assegnazione');
+  const v = filtraValide(tutte, filtriVuoti);
+  assert.deepEqual(v.map((x) => x.id), ['T9']);
+  const t = totali(v);
+  assert.equal(t.nResi, 0, 'un\'assegnazione non viene contata come reso');
+});

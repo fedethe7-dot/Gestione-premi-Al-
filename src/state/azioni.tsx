@@ -1,6 +1,7 @@
 import { messaggioErrore } from '../lib/api.ts';
 import { dataIt, num } from '../lib/format.ts';
-import type { Operazione, Reso, Trasferimento } from '../lib/types.ts';
+import { nomeTipo, raccoltaDi } from '../lib/operazioni.ts';
+import type { Assegnazione, Operazione, Reso, Trasferimento } from '../lib/types.ts';
 import { useDati } from './dati.tsx';
 import { useUi } from './ui.tsx';
 
@@ -8,12 +9,13 @@ import { useUi } from './ui.tsx';
 export function useAzioniOperazione() {
   const { api, aggiorna, operazioni } = useDati();
   const { conferma, avvisa } = useUi();
-  const etichetta = (o: Operazione) => (o.tipo === 'trasferimento' ? 'trasferimento' : 'reso');
+  const etichetta = (o: Operazione) => nomeTipo(o.tipo);
+  const articolo = (o: Operazione) => (o.tipo === 'assegnazione' ? "l'" : 'il ');
 
   const annulla = async (o: Operazione): Promise<boolean> => {
     const collegati = o.tipo === 'trasferimento' ? operazioni.filter((x) => x.trasferimentoId === o.id && x.stato === 'valido') : [];
     const motivo = await conferma({
-      titolo: `Annullare il ${etichetta(o)} ${o.id}?`,
+      titolo: `Annullare ${articolo(o)}${etichetta(o)} ${o.id}?`,
       messaggio: (
         <>
           <p>{dataIt(o.data)} · {o.premioDescrizione} · {num(o.quantita)} pz</p>
@@ -27,9 +29,9 @@ export function useAzioniOperazione() {
     });
     if (motivo === null) return false;
     try {
-      const r = await api<{ operazione: Trasferimento | Reso; avvisi: string[] }>('annullaOperazione', { tipo: o.tipo, id: o.id, motivo, atteso_modificato_il: o.modificatoIl });
-      aggiorna(o.tipo === 'trasferimento' ? 'trasferimenti' : 'resi', r.operazione);
-      avvisa('successo', `${o.id} annullato.`);
+      const r = await api<{ operazione: Trasferimento | Reso | Assegnazione; avvisi: string[] }>('annullaOperazione', { tipo: o.tipo, id: o.id, motivo, atteso_modificato_il: o.modificatoIl });
+      aggiorna(raccoltaDi(o.tipo), r.operazione);
+      avvisa('successo', `${o.id} ${o.tipo === 'assegnazione' ? 'annullata' : 'annullato'}.`);
       r.avvisi.forEach((a) => avvisa('info', a));
       return true;
     } catch (e) { avvisa('errore', messaggioErrore(e)); return false; }
@@ -43,9 +45,9 @@ export function useAzioniOperazione() {
     });
     if (ok === null) return false;
     try {
-      const r = await api<{ operazione: Trasferimento | Reso }>('ripristinaOperazione', { tipo: o.tipo, id: o.id, atteso_modificato_il: o.modificatoIl });
-      aggiorna(o.tipo === 'trasferimento' ? 'trasferimenti' : 'resi', r.operazione);
-      avvisa('successo', `${o.id} ripristinato.`);
+      const r = await api<{ operazione: Trasferimento | Reso | Assegnazione }>('ripristinaOperazione', { tipo: o.tipo, id: o.id, atteso_modificato_il: o.modificatoIl });
+      aggiorna(raccoltaDi(o.tipo), r.operazione);
+      avvisa('successo', `${o.id} ${o.tipo === 'assegnazione' ? 'ripristinata' : 'ripristinato'}.`);
       return true;
     } catch (e) { avvisa('errore', messaggioErrore(e)); return false; }
   };

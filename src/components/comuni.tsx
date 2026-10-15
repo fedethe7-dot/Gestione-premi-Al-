@@ -51,6 +51,7 @@ export function Rotella({ testo = 'Caricamento…' }: { testo?: string }) {
 }
 
 export function TipoBadge({ tipo }: { tipo: TipoOperazione }) {
+  if (tipo === 'assegnazione') return <span className="badge bg-violet-100 text-violet-800">Assegnazione</span>;
   return tipo === 'trasferimento'
     ? <span className="badge bg-blue-100 text-blue-800">Trasferimento</span>
     : <span className="badge bg-orange-100 text-orange-800">Reso</span>;

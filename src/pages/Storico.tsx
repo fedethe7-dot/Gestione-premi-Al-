@@ -16,7 +16,7 @@ import { useDati } from '../state/dati.tsx';
 import { useUi } from '../state/ui.tsx';
 
 interface Filtri {
-  testo: string; tipo: '' | 'trasferimento' | 'reso'; stato: '' | 'valido' | 'annullato'; catalogo: string;
+  testo: string; tipo: '' | 'trasferimento' | 'reso' | 'assegnazione'; stato: '' | 'valido' | 'annullato'; catalogo: string;
   da: string; a: string; origine: string; destinazione: string; pdv: string; premio: string; causale: string;
 }
 const VUOTI: Filtri = { testo: '', tipo: '', stato: '', catalogo: '', da: '', a: '', origine: '', destinazione: '', pdv: '', premio: '', causale: '' };
@@ -29,7 +29,7 @@ export function filtraStorico(ops: Operazione[], f: Filtri): Operazione[] {
     (!f.pdv || o.pdvOrigineId === f.pdv || o.pdvDestId === f.pdv || o.pdvResoId === f.pdv) &&
     (!f.premio || o.premioId === f.premio) && (!f.causale || o.causale === f.causale) &&
     (!f.testo || corrisponde([o.id, o.premioCodice, o.premioDescrizione, o.pdvOrigineCodice, o.pdvOrigineNome, o.pdvDestCodice, o.pdvDestNome,
-      o.pdvResoCodice, o.pdvResoNome, o.riferimento, o.note, o.causale, o.trasferimentoId, o.creatoDa].join(' '), f.testo)));
+      o.pdvResoCodice, o.pdvResoNome, o.riferimento, o.prenotazione, o.note, o.causale, o.trasferimentoId, o.creatoDa].join(' '), f.testo)));
 }
 
 export function PaginaStorico({ params }: { params: URLSearchParams }) {
@@ -68,7 +68,7 @@ export function PaginaStorico({ params }: { params: URLSearchParams }) {
 
   return (
     <div>
-      <Intestazione titolo="Storico operazioni" sottotitolo="Trasferimenti e resi, compresi quelli annullati."
+      <Intestazione titolo="Storico operazioni" sottotitolo="Trasferimenti, resi e assegnazioni, compresi quelli annullati."
         azioni={<button className="btn-secondario" onClick={esporta} disabled={!filtrate.length}><LuFileDown /> Esporta risultati ({num(filtrate.length)})</button>} />
 
       <div className="card mb-4 p-3">
@@ -77,12 +77,12 @@ export function PaginaStorico({ params }: { params: URLSearchParams }) {
             <label className="label" htmlFor="f-testo">Ricerca libera</label>
             <div className="relative">
               <LuSearch className="absolute top-2.5 left-2.5 text-slate-400" aria-hidden />
-              <input id="f-testo" className="input pl-8" value={f.testo} onChange={(e) => set('testo', e.target.value)} placeholder="Numero, premio, PDV, riferimento, note…" />
+              <input id="f-testo" className="input pl-8" value={f.testo} onChange={(e) => set('testo', e.target.value)} placeholder="Numero, premio, PDV, prenotazione, riferimento, note…" />
             </div>
           </div>
           <div><label className="label" htmlFor="f-tipo">Tipo</label>
             <select id="f-tipo" className="input" value={f.tipo} onChange={(e) => set('tipo', e.target.value as Filtri['tipo'])}>
-              <option value="">Tutti</option><option value="trasferimento">Trasferimenti</option><option value="reso">Resi</option>
+              <option value="">Tutti</option><option value="trasferimento">Trasferimenti</option><option value="reso">Resi</option><option value="assegnazione">Assegnazioni</option>
             </select></div>
           <div><label className="label" htmlFor="f-stato">Stato</label>
             <select id="f-stato" className="input" value={f.stato} onChange={(e) => set('stato', e.target.value as Filtri['stato'])}>
@@ -111,7 +111,7 @@ export function PaginaStorico({ params }: { params: URLSearchParams }) {
           <button className="btn-testo px-2 py-1" onClick={() => setAltri(!altri)}><LuFilter /> {altri ? 'Meno filtri' : 'Altri filtri (PDV, premio, causale)'}</button>
           {nFiltri > 0 && <button className="btn-testo px-2 py-1" onClick={() => { setF(VUOTI); vai('storico'); }}><LuX /> Azzera filtri ({nFiltri})</button>}
           <span className="ml-auto text-slate-600">
-            {num(filtrate.length)} operazioni · valide: <b>{num(totQ('trasferimento'))}</b> pz trasferiti, <b>{num(totQ('reso'))}</b> pz resi
+            {num(filtrate.length)} operazioni · valide: <b>{num(totQ('trasferimento'))}</b> pz trasferiti, <b>{num(totQ('reso'))}</b> pz resi, <b>{num(totQ('assegnazione'))}</b> pz assegnati
           </span>
         </div>
       </div>
@@ -134,11 +134,13 @@ export function PaginaStorico({ params }: { params: URLSearchParams }) {
                   <td className="font-mono text-xs whitespace-nowrap">{o.id}</td>
                   <td className="whitespace-nowrap">{mappe.cataloghi.get(o.catalogoId)?.codice}</td>
                   <td>{o.premioCodice && <span className="mr-1 font-mono text-xs text-slate-500">{o.premioCodice}</span>}{o.premioDescrizione}</td>
-                  <td>{o.tipo === 'trasferimento' ? o.pdvOrigineNome : o.pdvResoNome}</td>
+                  <td>{o.tipo === 'reso' ? o.pdvResoNome : o.pdvOrigineNome}</td>
                   <td>{o.pdvDestNome}</td>
                   <td className="num font-semibold">{num(o.quantita)}</td>
                   <td>{o.causale}</td>
-                  <td className="max-w-32 truncate" title={o.riferimento}>{o.riferimento}</td>
+                  <td className="max-w-32 truncate" title={[o.prenotazione && `Prenotazione ${o.prenotazione}`, o.riferimento].filter(Boolean).join(' · ')}>
+                    {o.prenotazione && <span className="font-mono text-xs">Pren. {o.prenotazione}</span>}{o.prenotazione && o.riferimento ? ' · ' : ''}{o.riferimento}
+                  </td>
                   <td className="!no-underline"><StatoBadge stato={o.stato} /></td>
                 </tr>
               ))}
@@ -157,7 +159,7 @@ export function PaginaStorico({ params }: { params: URLSearchParams }) {
 const AZIONI: Record<string, string> = { crea: 'Creazione', modifica: 'Modifica', annulla: 'Annullamento', ripristina: 'Ripristino' };
 const ETICHETTE: Record<string, string> = {
   data: 'Data', catalogo_id: 'Catalogo', premio_id: 'Premio', pdv_origine_id: 'PDV origine', pdv_destinazione_id: 'PDV destinazione', pdv_id: 'PDV',
-  quantita: 'Quantità', causale: 'Causale', riferimento: 'Riferimento', note: 'Note', trasferimento_id: 'Trasferimento collegato', motivo: 'Motivo', motivo_precedente: 'Motivo precedente',
+  quantita: 'Quantità', causale: 'Causale', riferimento: 'Riferimento', prenotazione: 'N. prenotazione', note: 'Note', trasferimento_id: 'Trasferimento collegato', motivo: 'Motivo', motivo_precedente: 'Motivo precedente',
 };
 
 function DettaglioOperazione({ op, chiudi, apri }: { op: Operazione; chiudi: () => void; apri: (id: string) => void }) {
@@ -166,7 +168,7 @@ function DettaglioOperazione({ op, chiudi, apri }: { op: Operazione; chiudi: () 
   const [registro, setRegistro] = useState<VoceRegistro[] | null>(null);
   const [errReg, setErrReg] = useState('');
   const [modifica, setModifica] = useState(false);
-  const raw = op.tipo === 'trasferimento' ? mappe.trasferimenti.get(op.id) : mappe.resi.get(op.id);
+  const raw = op.tipo === 'trasferimento' ? mappe.trasferimenti.get(op.id) : op.tipo === 'reso' ? mappe.resi.get(op.id) : mappe.assegnazioni.get(op.id);
 
   useEffect(() => {
     let vivo = true;
@@ -189,10 +191,12 @@ function DettaglioOperazione({ op, chiudi, apri }: { op: Operazione; chiudi: () 
     ['Premio', <>{op.premioCodice && <span className="mr-1 font-mono text-xs">{op.premioCodice}</span>}{op.premioDescrizione}</>],
     ...(op.tipo === 'trasferimento'
       ? [['PDV di origine', `${op.pdvOrigineCodice} — ${op.pdvOrigineNome}`], ['PDV di destinazione', `${op.pdvDestCodice} — ${op.pdvDestNome}`]] as [string, string][]
-      : [['Punto vendita', `${op.pdvResoCodice} — ${op.pdvResoNome}`]] as [string, string][]),
+      : op.tipo === 'assegnazione'
+        ? [['Da', op.pdvOrigineNome], ['PDV di destinazione', `${op.pdvDestCodice} — ${op.pdvDestNome}`], ['N. prenotazione', <b className="font-mono">{op.prenotazione || '—'}</b>]] as [string, ReactNode][]
+        : [['Punto vendita', `${op.pdvResoCodice} — ${op.pdvResoNome}`]] as [string, string][]),
     ['Quantità', <b>{num(op.quantita)}</b>],
     ['Causale', op.causale || '—'],
-    [op.tipo === 'trasferimento' ? 'Riferimento' : 'Numero documento', op.riferimento || '—'],
+    [op.tipo === 'reso' ? 'Numero documento' : 'Riferimento', op.riferimento || '—'],
     ...(op.tipo === 'reso' ? [['Trasferimento collegato', op.trasferimentoId
       ? <button className="font-mono text-brand-700 underline" onClick={() => apri(op.trasferimentoId)}>{op.trasferimentoId}</button> : 'Nessuno']] as [string, ReactNode][] : []),
     ['Note', op.note || '—'],

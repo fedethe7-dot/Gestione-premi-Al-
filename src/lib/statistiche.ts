@@ -3,7 +3,9 @@
  *  - si usano solo le operazioni con stato "valido" (le annullate sono escluse);
  *  - ogni trasferimento è contato UNA volta nei totali generali; "in uscita" e "in entrata"
  *    hanno senso solo dal punto di vista di un singolo PDV e non vanno sommati tra loro;
- *  - i resi sono una tipologia distinta e non modificano i trasferimenti.
+ *  - i resi sono una tipologia distinta e non modificano i trasferimenti;
+ *  - le assegnazioni dal magazzino NON entrano in queste statistiche (che riguardano trasferimenti
+ *    e resi tra PDV): hanno i loro totali dedicati in Dashboard, Storico ed Esportazioni.
  */
 import type { Catalogo, Operazione } from './types.ts';
 
@@ -21,7 +23,7 @@ export function coinvolgePdv(o: Operazione, pdvId: string): boolean {
 
 export function filtraValide(ops: Operazione[], f: FiltriStat): Operazione[] {
   return ops.filter((o) =>
-    o.stato === 'valido' &&
+    o.stato === 'valido' && o.tipo !== 'assegnazione' &&
     (!f.da || o.data >= f.da) &&
     (!f.a || o.data <= f.a) &&
     (!f.catalogoId || o.catalogoId === f.catalogoId) &&

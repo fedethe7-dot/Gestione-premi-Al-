@@ -2,6 +2,7 @@
 import type { Colonna } from './csv.ts';
 import { dataIt, dataOraIt } from './format.ts';
 import type { StatCatalogo, StatPdv, StatPremio } from './statistiche.ts';
+import { nomeTipo } from './operazioni.ts';
 import type { Catalogo, Operazione, Pdv, Premio } from './types.ts';
 
 const siNo = (v: string) => (v === 'SI' ? 'SI' : 'NO');
@@ -80,11 +81,26 @@ export function colonneResi(cat: Map<string, Catalogo>): Colonna<Operazione>[] {
   ];
 }
 
+export function colonneAssegnazioni(cat: Map<string, Catalogo>): Colonna<Operazione>[] {
+  return [
+    ...iniziali(cat),
+    { titolo: 'Da', valore: (o) => o.pdvOrigineNome },
+    { titolo: 'Codice PDV destinazione', valore: (o) => o.pdvDestCodice },
+    { titolo: 'PDV destinazione', valore: (o) => o.pdvDestNome },
+    { titolo: 'Quantità', valore: (o) => o.quantita },
+    { titolo: 'N. prenotazione', valore: (o) => o.prenotazione },
+    { titolo: 'Causale', valore: (o) => o.causale },
+    { titolo: 'Riferimento / documento', valore: (o) => o.riferimento },
+    { titolo: 'Note', valore: (o) => o.note },
+    ...finali(),
+  ];
+}
+
 export function colonneStorico(cat: Map<string, Catalogo>): Colonna<Operazione>[] {
   const [id, ...resto] = iniziali(cat);
   return [
     id,
-    { titolo: 'Tipo operazione', valore: (o) => (o.tipo === 'trasferimento' ? 'Trasferimento' : 'Reso') },
+    { titolo: 'Tipo operazione', valore: (o) => nomeTipo(o.tipo, true) },
     ...resto,
     { titolo: 'Codice PDV origine', valore: (o) => o.pdvOrigineCodice },
     { titolo: 'PDV origine', valore: (o) => o.pdvOrigineNome },
@@ -96,6 +112,7 @@ export function colonneStorico(cat: Map<string, Catalogo>): Colonna<Operazione>[
     { titolo: 'Causale', valore: (o) => o.causale },
     { titolo: 'Riferimento / documento', valore: (o) => o.riferimento },
     { titolo: 'Trasferimento collegato', valore: (o) => o.trasferimentoId },
+    { titolo: 'N. prenotazione', valore: (o) => o.prenotazione },
     { titolo: 'Note', valore: (o) => o.note },
     ...finali(),
   ];

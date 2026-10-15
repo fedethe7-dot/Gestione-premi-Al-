@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
-import { LuBan, LuRotateCcw } from 'react-icons/lu';
+import { LuBan, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
 import { FormOperazione } from '../components/FormOperazione.tsx';
 import { Intestazione, StatoBadge, Vuoto } from '../components/comuni.tsx';
 import { dataIt, dataOraIt, num, oggiIso } from '../lib/format.ts';
+import { descriviPdv } from '../lib/operazioni.ts';
 import type { TipoOperazione } from '../lib/types.ts';
 import { useAzioniOperazione } from '../state/azioni.tsx';
 import { useDati } from '../state/dati.tsx';
 
 export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; params?: URLSearchParams }) {
-  const { operazioni, cfg } = useDati();
+  const { operazioni, cfg, magazzino, assegnazioniAttive } = useDati();
   const { annulla, ripristina } = useAzioniOperazione();
   const oggi = oggiIso();
   const recenti = useMemo(() => operazioni
@@ -19,8 +20,16 @@ export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,1.2fr)]">
       <div>
-        <Intestazione titolo={tipo === 'trasferimento' ? 'Nuovo trasferimento' : 'Nuovo reso'}
-          sottotitolo={tipo === 'trasferimento' ? 'Premi spostati da un punto vendita a un altro.' : 'Premi resi da un punto vendita. Non modifica i trasferimenti già registrati.'} />
+        <Intestazione titolo={tipo === 'trasferimento' ? 'Nuovo trasferimento' : tipo === 'reso' ? 'Nuovo reso' : 'Nuova assegnazione'}
+          sottotitolo={tipo === 'trasferimento' ? 'Premi spostati da un punto vendita a un altro.'
+            : tipo === 'reso' ? 'Premi resi da un punto vendita. Non modifica i trasferimenti già registrati.'
+              : `Premi assegnati dal ${magazzino} a un punto vendita, con il numero di prenotazione.`} />
+        {tipo === 'assegnazione' && !assegnazioniAttive && (
+          <p className="mb-3 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900" role="status">
+            <LuTriangleAlert className="mt-0.5 shrink-0" />
+            <span>Le assegnazioni funzioneranno dopo l'aggiornamento dello script Apps Script del gestionale (file <b>Code.gs</b>). Trasferimenti, resi e il resto dell'app funzionano già normalmente.</span>
+          </p>
+        )}
         <div className="card p-5">
           <FormOperazione tipo={tipo} trasferimentoIniziale={params?.get('trasferimento') ?? undefined} />
         </div>
@@ -37,7 +46,7 @@ export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; 
               </div>
               <div className="truncate font-medium" title={o.premioDescrizione}>{num(o.quantita)} × {o.premioDescrizione}</div>
               <div className="truncate text-xs text-slate-600">
-                {o.tipo === 'trasferimento' ? `${o.pdvOrigineNome} → ${o.pdvDestNome}` : o.pdvResoNome} · {dataIt(o.data)}
+                {descriviPdv(o)} · {dataIt(o.data)}{o.prenotazione ? ` · pren. ${o.prenotazione}` : ''}
               </div>
               <div className="mt-1 flex items-center justify-between">
                 <StatoBadge stato={o.stato} />

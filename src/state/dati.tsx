@@ -2,10 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { chiama, messaggioErrore } from '../lib/api.ts';
 import { leggiConfig, salvaConfig, type Config } from '../lib/config.ts';
-import { unisci } from '../lib/operazioni.ts';
-import type { Catalogo, Causale, DatiCompleti, Operazione, Pdv, Premio, Reso, Trasferimento } from '../lib/types.ts';
+import { MAGAZZINO, unisci } from '../lib/operazioni.ts';
+import type { Assegnazione, Catalogo, Causale, DatiCompleti, Operazione, Pdv, Premio, Reso, TipoOperazione, Trasferimento } from '../lib/types.ts';
 
-type Raccolta = 'cataloghi' | 'premi' | 'pdv' | 'causali' | 'trasferimenti' | 'resi';
+type Raccolta = 'cataloghi' | 'premi' | 'pdv' | 'causali' | 'trasferimenti' | 'resi' | 'assegnazioni';
 type ConId = { id: string };
 
 interface Stato {
@@ -22,10 +22,14 @@ interface Stato {
   operazioni: Operazione[];
   mappe: {
     pdv: Map<string, Pdv>; premi: Map<string, Premio>; cataloghi: Map<string, Catalogo>;
-    trasferimenti: Map<string, Trasferimento>; resi: Map<string, Reso>;
+    trasferimenti: Map<string, Trasferimento>; resi: Map<string, Reso>; assegnazioni: Map<string, Assegnazione>;
   };
   cataloghiOrdinati: Catalogo[];
-  causali: (tipo: 'trasferimento' | 'reso', soloAttive?: boolean) => Causale[];
+  causali: (tipo: TipoOperazione, soloAttive?: boolean) => Causale[];
+  /** Nome del magazzino da cui partono le assegnazioni. */
+  magazzino: string;
+  /** Falso finché lo script Apps Script non è aggiornato alla versione con le assegnazioni. */
+  assegnazioniAttive: boolean;
 }
 
 const Ctx = createContext<Stato | null>(null);
@@ -78,14 +82,15 @@ export function ProviderDati({ children }: { children: ReactNode }) {
   const aggiorna = useCallback((raccolta: Raccolta, record: ConId) => {
     setDati((d) => {
       if (!d) return d;
-      const lista = d[raccolta] as unknown as ConId[];
+      const lista = (d[raccolta] ?? []) as unknown as ConId[];
       const i = lista.findIndex((r) => r.id === record.id);
       const nuova = i >= 0 ? lista.map((r, j) => (j === i ? record : r)) : [...lista, record];
       return { ...d, [raccolta]: nuova };
     });
   }, []);
 
-  const operazioni = useMemo(() => (dati ? unisci(dati.trasferimenti, dati.resi) : []), [dati]);
+  const magazzino = dati?.magazzino || MAGAZZINO;
+  const operazioni = useMemo(() => (dati ? unisci(dati.trasferimenti, dati.resi, dati.assegnazioni ?? [], dati.magazzino || MAGAZZINO) : []), [dati]);
 
   const mappe = useMemo(() => ({
     pdv: new Map((dati?.pdv ?? []).map((x) => [x.id, x])),
@@ -93,18 +98,19 @@ export function ProviderDati({ children }: { children: ReactNode }) {
     cataloghi: new Map((dati?.cataloghi ?? []).map((x) => [x.id, x])),
     trasferimenti: new Map((dati?.trasferimenti ?? []).map((x) => [x.id, x])),
     resi: new Map((dati?.resi ?? []).map((x) => [x.id, x])),
+    assegnazioni: new Map((dati?.assegnazioni ?? []).map((x) => [x.id, x])),
   }), [dati]);
 
   const cataloghiOrdinati = useMemo(() => [...(dati?.cataloghi ?? [])].sort((a, b) =>
     (Number(a.ordine) || 0) - (Number(b.ordine) || 0) || a.codice.localeCompare(b.codice)), [dati]);
 
-  const causali = useCallback((tipo: 'trasferimento' | 'reso', soloAttive = true) =>
+  const causali = useCallback((tipo: TipoOperazione, soloAttive = true) =>
     (dati?.causali ?? []).filter((c) => c.tipo === tipo && (!soloAttive || c.attivo === 'SI'))
       .sort((a, b) => (Number(a.ordine) || 0) - (Number(b.ordine) || 0)), [dati]);
 
   const valore: Stato = {
     cfg, aggiornaConfig, dati, caricamento, errore, ultimoCaricamento: ultimo, ricarica, api, aggiorna,
-    operazioni, mappe, cataloghiOrdinati, causali,
+    operazioni, mappe, cataloghiOrdinati, causali, magazzino, assegnazioniAttive: Array.isArray(dati?.assegnazioni),
   };
   return <Ctx.Provider value={valore}>{children}</Ctx.Provider>;
 }

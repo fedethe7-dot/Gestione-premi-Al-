@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
-import { LuArrowRightLeft, LuCircleCheck, LuUndo2 } from 'react-icons/lu';
+import { LuArrowRightLeft, LuCircleCheck, LuPackagePlus, LuUndo2 } from 'react-icons/lu';
 import { Barra, FiltroPeriodo, Intestazione, Kpi, SelettoreCatalogo, StatoBadge, TipoBadge, Vuoto, type Periodo } from '../components/comuni.tsx';
 import { COLORE_RESO, COLORE_TRASF } from '../components/Grafici.tsx';
 import { leggiPref, salvaPref } from '../lib/config.ts';
 import { dataIt, dataOraIt, num, oggiIso, primoDelMese } from '../lib/format.ts';
+import { descriviPdv } from '../lib/operazioni.ts';
 import { filtraValide, statPerPdv, statPerPremio, totali } from '../lib/statistiche.ts';
+
+const COLORE_ASSEGN = '#7c3aed';
 import { useDati } from '../state/dati.tsx';
 
 export function PaginaDashboard() {
-  const { dati, operazioni, cataloghiOrdinati, mappe } = useDati();
+  const { dati, operazioni, cataloghiOrdinati, mappe, magazzino } = useDati();
   const [periodo, setPeriodo] = useState<Periodo>(() => {
     try { const p = JSON.parse(leggiPref('dashboard-periodo')); if (p && typeof p.da === 'string') return p; } catch { /* default */ }
     return { da: primoDelMese(), a: oggiIso() };
@@ -19,6 +22,10 @@ export function PaginaDashboard() {
 
   const filtrate = useMemo(() => filtraValide(operazioni, { ...periodo, catalogoId: catalogo, premioId: '', pdvId: '', tipo: 'entrambi' }), [operazioni, periodo, catalogo]);
   const tot = totali(filtrate);
+  // Le assegnazioni dal magazzino hanno totali a parte (non entrano nelle statistiche tra PDV).
+  const assegn = useMemo(() => operazioni.filter((o) => o.tipo === 'assegnazione' && o.stato === 'valido' &&
+    (!periodo.da || o.data >= periodo.da) && (!periodo.a || o.data <= periodo.a) && (!catalogo || o.catalogoId === catalogo)), [operazioni, periodo, catalogo]);
+  const qAssegn = assegn.reduce((s, o) => s + o.quantita, 0);
   const anag = useMemo(() => new Map(dati!.pdv.map((p) => [p.id, { codice: p.codice, nome: p.nome }])), [dati]);
   const topPremi = useMemo(() => statPerPremio(filtrate).sort((a, b) => b.qTrasf - a.qTrasf || b.qResi - a.qResi).slice(0, 8), [filtrate]);
   const topPdv = useMemo(() => statPerPdv(filtrate, anag).filter((s) => s.nUscita + s.nEntrata > 0)
@@ -38,6 +45,7 @@ export function PaginaDashboard() {
       <Intestazione titolo="Dashboard" azioni={<>
         <a className="btn-primario btn-grande" href="#/trasferimento"><LuArrowRightLeft /> Nuovo trasferimento</a>
         <a className="btn-secondario btn-grande" href="#/reso"><LuUndo2 /> Nuovo reso</a>
+        <a className="btn-secondario btn-grande" href="#/assegnazione"><LuPackagePlus /> Nuova assegnazione</a>
       </>} />
 
       {daFare.some((d) => !d.fatto) && (
@@ -59,11 +67,13 @@ export function PaginaDashboard() {
         <div><label className="label" htmlFor="dash-cat">Stagione / catalogo</label><SelettoreCatalogo id="dash-cat" valore={catalogo} onChange={cambiaCatalogo} cataloghi={cataloghiOrdinati} /></div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Kpi titolo="Trasferimenti" valore={num(tot.nTrasf)} nota="operazioni valide nel periodo" colore={COLORE_TRASF} />
         <Kpi titolo="Quantità trasferita" valore={num(tot.qTrasf)} nota="pezzi" colore={COLORE_TRASF} />
         <Kpi titolo="Resi" valore={num(tot.nResi)} nota="operazioni valide nel periodo" colore={COLORE_RESO} />
         <Kpi titolo="Quantità resa" valore={num(tot.qResi)} nota="pezzi" colore={COLORE_RESO} />
+        <Kpi titolo="Assegnazioni" valore={num(assegn.length)} nota={`dal ${magazzino}`} colore={COLORE_ASSEGN} />
+        <Kpi titolo="Quantità assegnata" valore={num(qAssegn)} nota="pezzi" colore={COLORE_ASSEGN} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -118,7 +128,7 @@ export function PaginaDashboard() {
                 <td className="w-28"><TipoBadge tipo={o.tipo} /></td>
                 <td className="font-mono text-xs whitespace-nowrap">{o.id}</td>
                 <td>{num(o.quantita)} × {o.premioDescrizione}</td>
-                <td>{o.tipo === 'trasferimento' ? `${o.pdvOrigineNome} → ${o.pdvDestNome}` : o.pdvResoNome}</td>
+                <td>{descriviPdv(o)}</td>
                 <td className="whitespace-nowrap">{dataIt(o.data)}</td>
                 <td><StatoBadge stato={o.stato} /></td>
                 <td className="text-slate-500">{o.modificatoDa}</td>

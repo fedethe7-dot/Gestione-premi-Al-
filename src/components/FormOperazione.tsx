@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LuArrowLeftRight, LuEraser, LuLink } from 'react-icons/lu';
+import { LuArrowLeftRight, LuEraser, LuLink, LuWarehouse } from 'react-icons/lu';
 import { ApiError, messaggioErrore } from '../lib/api.ts';
 import { leggiPref, salvaPref } from '../lib/config.ts';
 import { dataIt, num, oggiIso } from '../lib/format.ts';
-import type { Reso, TipoOperazione, Trasferimento } from '../lib/types.ts';
+import { nomeTipo, raccoltaDi, unTipo } from '../lib/operazioni.ts';
+import type { Assegnazione, Reso, TipoOperazione, Trasferimento } from '../lib/types.ts';
 import { useDati } from '../state/dati.tsx';
 import { useUi } from '../state/ui.tsx';
 import { Combobox, type Opzione } from './Combobox.tsx';
@@ -11,37 +12,46 @@ import { Campo } from './comuni.tsx';
 
 interface Valori {
   catalogo_id: string; data: string; premio_id: string; quantita: string; causale: string; riferimento: string; note: string;
-  pdv_origine_id: string; pdv_destinazione_id: string; pdv_id: string; trasferimento_id: string;
+  pdv_origine_id: string; pdv_destinazione_id: string; pdv_id: string; trasferimento_id: string; prenotazione: string;
 }
+
+type Operazione = Trasferimento | Reso | Assegnazione;
 
 const vuoti = (catalogo: string): Valori => ({
   catalogo_id: catalogo, data: oggiIso(), premio_id: '', quantita: '', causale: '', riferimento: '', note: '',
-  pdv_origine_id: '', pdv_destinazione_id: '', pdv_id: '', trasferimento_id: '',
+  pdv_origine_id: '', pdv_destinazione_id: '', pdv_id: '', trasferimento_id: '', prenotazione: '',
 });
 
-function daEsistente(tipo: TipoOperazione, op: Trasferimento | Reso): Valori {
+function daEsistente(tipo: TipoOperazione, op: Operazione): Valori {
   const base = { ...vuoti(op.catalogo_id), data: op.data, premio_id: op.premio_id, quantita: op.quantita, causale: op.causale, riferimento: op.riferimento, note: op.note };
   if (tipo === 'trasferimento') {
     const t = op as Trasferimento;
     return { ...base, pdv_origine_id: t.pdv_origine_id, pdv_destinazione_id: t.pdv_destinazione_id };
   }
+  if (tipo === 'assegnazione') {
+    const a = op as Assegnazione;
+    return { ...base, pdv_id: a.pdv_id, prenotazione: a.prenotazione ?? '' };
+  }
   const r = op as Reso;
   return { ...base, pdv_id: r.pdv_id, trasferimento_id: r.trasferimento_id };
 }
 
+const AZIONE: Record<TipoOperazione, string> = { trasferimento: 'saveTrasferimento', reso: 'saveReso', assegnazione: 'saveAssegnazione' };
+const ETICHETTA_DATA: Record<TipoOperazione, string> = { trasferimento: 'Data trasferimento', reso: 'Data reso', assegnazione: 'Data assegnazione' };
+
 /**
- * Modulo di inserimento/modifica di un trasferimento o di un reso.
+ * Modulo di inserimento/modifica di un trasferimento, di un reso o di un'assegnazione dal magazzino.
  * Pensato per l'inserimento in serie: dopo il salvataggio restano catalogo, data, PDV e riferimento,
  * e il cursore torna sul premio. Ctrl+Invio salva da qualunque campo.
  */
 export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalvato, onAnnulla }: {
   tipo: TipoOperazione;
-  esistente?: Trasferimento | Reso;
+  esistente?: Operazione;
   trasferimentoIniziale?: string;
-  onSalvato?: (op: Trasferimento | Reso) => void;
+  onSalvato?: (op: Operazione) => void;
   onAnnulla?: () => void;
 }) {
-  const { dati, api, aggiorna, cataloghiOrdinati, causali, mappe } = useDati();
+  const { dati, api, aggiorna, cataloghiOrdinati, causali, mappe, magazzino } = useDati();
   const { avvisa, conferma } = useUi();
   const modifica = Boolean(esistente);
   const cataloghiAttivi = cataloghiOrdinati.filter((c) => c.attivo === 'SI' || c.id === esistente?.catalogo_id);
@@ -122,6 +132,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       if (!v.pdv_destinazione_id) e.pdv_destinazione_id = 'Scegli il PDV di destinazione.';
       if (v.pdv_origine_id && v.pdv_origine_id === v.pdv_destinazione_id) e.pdv_destinazione_id = 'Origine e destinazione non possono coincidere.';
     } else if (!v.pdv_id) e.pdv_id = 'Scegli il punto vendita.';
+    if (tipo === 'assegnazione' && !v.prenotazione.trim()) e.prenotazione = 'Inserisci il numero di prenotazione.';
     setErrori(e);
     const primo = Object.keys(e)[0];
     if (primo) formRef.current?.querySelector<HTMLElement>(`#op-${primo}`)?.focus();
@@ -135,7 +146,15 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       return dati!.trasferimenti.find((t) => t.stato === 'valido' && t.data === v.data && t.premio_id === v.premio_id &&
         t.pdv_origine_id === v.pdv_origine_id && t.pdv_destinazione_id === v.pdv_destinazione_id && t.quantita === String(Number(v.quantita)));
     }
+    if (tipo === 'assegnazione') return null;
     return dati!.resi.find((r) => r.stato === 'valido' && r.data === v.data && r.premio_id === v.premio_id && r.pdv_id === v.pdv_id && r.quantita === String(Number(v.quantita)));
+  };
+
+  /** Assegnazioni: avvisa se lo stesso numero di prenotazione è già stato usato. */
+  const prenotazioneUsata = () => {
+    if (tipo !== 'assegnazione') return null;
+    const n = v.prenotazione.trim().toLowerCase();
+    return (dati!.assegnazioni ?? []).find((a) => a.stato === 'valido' && a.id !== esistente?.id && (a.prenotazione ?? '').trim().toLowerCase() === n) ?? null;
   };
 
   const salva = async () => {
@@ -146,32 +165,52 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
     if (dop) {
       const ok = await conferma({
         titolo: 'Possibile doppione',
-        messaggio: <p>Esiste già {tipo === 'trasferimento' ? 'un trasferimento identico' : 'un reso identico'} (<b>{dop.id}</b>) con la stessa data, premio, punti vendita e quantità. Vuoi registrarlo comunque?</p>,
+        messaggio: <p>Esiste già {unTipo(tipo)} identico (<b>{dop.id}</b>) con la stessa data, premio, punti vendita e quantità. Vuoi registrarlo comunque?</p>,
+        etichetta: 'Registra comunque',
+      });
+      if (ok === null) return;
+    }
+    const usata = prenotazioneUsata();
+    if (usata) {
+      const ok = await conferma({
+        titolo: 'Prenotazione già registrata',
+        messaggio: <p>La prenotazione <b>{usata.prenotazione}</b> è già presente nell'assegnazione <b>{usata.id}</b> ({dataIt(usata.data)} · {usata.premio_descrizione} · {usata.pdv_nome}). Vuoi registrarla comunque?</p>,
         etichetta: 'Registra comunque',
       });
       if (ok === null) return;
     }
     setInCorso(true);
+    const comuni = { catalogo_id: v.catalogo_id, data: v.data, premio_id: v.premio_id, quantita: v.quantita.trim(), causale: v.causale, riferimento: v.riferimento, note: v.note };
     const payload = tipo === 'trasferimento'
-      ? { catalogo_id: v.catalogo_id, data: v.data, premio_id: v.premio_id, quantita: v.quantita.trim(), causale: v.causale, riferimento: v.riferimento, note: v.note, pdv_origine_id: v.pdv_origine_id, pdv_destinazione_id: v.pdv_destinazione_id }
-      : { catalogo_id: v.catalogo_id, data: v.data, premio_id: v.premio_id, quantita: v.quantita.trim(), causale: v.causale, riferimento: v.riferimento, note: v.note, pdv_id: v.pdv_id, trasferimento_id: v.trasferimento_id };
+      ? { ...comuni, pdv_origine_id: v.pdv_origine_id, pdv_destinazione_id: v.pdv_destinazione_id }
+      : tipo === 'assegnazione'
+        ? { ...comuni, pdv_id: v.pdv_id, prenotazione: v.prenotazione.trim() }
+        : { ...comuni, pdv_id: v.pdv_id, trasferimento_id: v.trasferimento_id };
     try {
-      const r = await api<Trasferimento | Reso>(tipo === 'trasferimento' ? 'saveTrasferimento' : 'saveReso',
-        esistente ? { ...payload, id: esistente.id, atteso_modificato_il: esistente.modificato_il } : payload);
-      aggiorna(tipo === 'trasferimento' ? 'trasferimenti' : 'resi', r);
-      avvisa('successo', modifica ? `${r.id} aggiornato.` : `${tipo === 'trasferimento' ? 'Trasferimento' : 'Reso'} ${r.id} registrato.`);
+      const r = await api<Operazione>(AZIONE[tipo], esistente ? { ...payload, id: esistente.id, atteso_modificato_il: esistente.modificato_il } : payload);
+      aggiorna(raccoltaDi(tipo), r);
+      const f = tipo === 'assegnazione';
+      avvisa('successo', modifica ? `${r.id} ${f ? 'aggiornata' : 'aggiornato'}.` : `${nomeTipo(tipo, true)} ${r.id} ${f ? 'registrata' : 'registrato'}.`);
       if (!modifica) {
         setV((x) => ({
-          ...x, premio_id: '', quantita: '', note: '', trasferimento_id: '',
+          ...x, premio_id: '', quantita: '', note: '', trasferimento_id: '', prenotazione: '',
           ...(mantieni ? {} : { pdv_origine_id: '', pdv_destinazione_id: '', pdv_id: '', riferimento: '', causale: '' }),
         }));
         setErrori({});
-        setTimeout(() => (mantieni ? premioRef.current : primoRef.current)?.focus(), 0);
+        // Assegnazioni: ogni registrazione ha la sua prenotazione, quindi il cursore torna lì.
+        const prossimo = () => (tipo === 'assegnazione' && mantieni ? formRef.current?.querySelector<HTMLElement>('#op-prenotazione') : null)
+          ?? (mantieni ? premioRef.current : primoRef.current);
+        setTimeout(() => prossimo()?.focus(), 0);
       }
       onSalvato?.(r);
     } catch (e) {
       const campi = e instanceof ApiError ? (e.details as { campi?: Record<string, string> } | null)?.campi : undefined;
       if (campi) setErrori(campi as Partial<Record<keyof Valori, string>>);
+      // Script Apps Script non ancora aggiornato: spiega cosa fare invece di mostrare l'errore tecnico.
+      if (e instanceof ApiError && e.code === 'RICHIESTA' && e.message.includes(AZIONE[tipo])) {
+        setErroreGenerale('Per registrare le assegnazioni bisogna prima aggiornare lo script Apps Script del gestionale (file Code.gs). Le altre funzioni continuano a funzionare normalmente.');
+        return;
+      }
       setErroreGenerale(messaggioErrore(e));
       if (!(e instanceof ApiError) || e.code === 'RETE') avvisa('errore', messaggioErrore(e));
     } finally {
@@ -201,10 +240,10 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       </fieldset>
 
       <div className="grid grid-cols-12 gap-x-4 gap-y-3">
-        <Campo etichetta={tipo === 'trasferimento' ? 'Data trasferimento' : 'Data reso'} per="op-data" obbligatorio errore={errori.data} className="col-span-3">
+        <Campo etichetta={ETICHETTA_DATA[tipo]} per="op-data" obbligatorio errore={errori.data} className="col-span-3">
           <input id="op-data" type="date" className={`input ${errori.data ? 'input-errore' : ''}`} value={v.data} onChange={(e) => set('data', e.target.value)} />
         </Campo>
-        <Campo etichetta={tipo === 'trasferimento' ? 'Riferimento / documento' : 'Numero documento'} per="op-riferimento" className="col-span-3">
+        <Campo etichetta={tipo === 'reso' ? 'Numero documento' : 'Riferimento / documento'} per="op-riferimento" className="col-span-3">
           <input id="op-riferimento" className="input" value={v.riferimento} maxLength={100} onChange={(e) => set('riferimento', e.target.value)} />
         </Campo>
         <Campo etichetta="Causale" per="op-causale" errore={errori.causale} className="col-span-6">
@@ -227,6 +266,23 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
             <Campo etichetta="PDV di destinazione" per="op-pdv_destinazione_id" obbligatorio errore={errori.pdv_destinazione_id} className="col-span-6 md:col-span-5">
               <Combobox id="op-pdv_destinazione_id" opzioni={opzioniPdv.filter((o) => o.id !== v.pdv_origine_id)} valore={v.pdv_destinazione_id}
                 onChange={(id) => set('pdv_destinazione_id', id)} errore={!!errori.pdv_destinazione_id} vuoto="Nessun PDV attivo trovato" />
+            </Campo>
+          </>
+        ) : tipo === 'assegnazione' ? (
+          <>
+            <div className="col-span-12 md:col-span-4">
+              <span className="label">Da</span>
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700" title="Le assegnazioni partono sempre dal magazzino">
+                <LuWarehouse className="shrink-0 text-slate-500" aria-hidden /> {magazzino}
+              </div>
+            </div>
+            <Campo etichetta="Punto vendita che riceve" per="op-pdv_id" obbligatorio errore={errori.pdv_id} className="col-span-8 md:col-span-5">
+              <Combobox id="op-pdv_id" opzioni={opzioniPdv} valore={v.pdv_id} onChange={(id) => set('pdv_id', id)} errore={!!errori.pdv_id}
+                inputRef={primoRef} autoFocus={!modifica} vuoto="Nessun PDV attivo trovato" />
+            </Campo>
+            <Campo etichetta="N. prenotazione" per="op-prenotazione" obbligatorio errore={errori.prenotazione} className="col-span-4 md:col-span-3">
+              <input id="op-prenotazione" className={`input font-mono ${errori.prenotazione ? 'input-errore' : ''}`} value={v.prenotazione} maxLength={60} autoComplete="off"
+                onChange={(e) => set('prenotazione', e.target.value)} />
             </Campo>
           </>
         ) : (
@@ -264,7 +320,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
         <button type="submit" className="btn-primario btn-grande" disabled={inCorso}>
-          {inCorso ? 'Salvataggio…' : modifica ? 'Salva modifiche' : tipo === 'trasferimento' ? 'Registra trasferimento' : 'Registra reso'}
+          {inCorso ? 'Salvataggio…' : modifica ? 'Salva modifiche' : `Registra ${nomeTipo(tipo)}`}
         </button>
         <span className="text-xs text-slate-500">oppure <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-50 px-1">Invio</kbd></span>
         {!modifica && (

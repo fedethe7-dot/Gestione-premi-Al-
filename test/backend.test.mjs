@@ -208,3 +208,99 @@ test('richiesta malformata', () => {
   const r = be.request('{non json');
   assert.equal(r.ok, false);
 });
+
+/* ------------------------------------------------------------------ assegnazioni dal magazzino */
+
+test('assegnazioni: causali iniziali e magazzino di partenza', () => {
+  const d = ok(call('getAll'));
+  assert.ok(Array.isArray(d.assegnazioni));
+  assert.equal(d.magazzino, 'Magazzino via Svezia 04');
+  assert.deepEqual(d.causali.filter((c) => c.tipo === 'assegnazione').map((c) => c.descrizione), ['Prenotazione cliente', 'Altra causale']);
+});
+
+test('assegnazione valida, validazioni e numero di prenotazione obbligatorio', () => {
+  const a = ok(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '2', prenotazione: ' PR-0042 ', causale: 'prenotazione cliente', riferimento: 'DDT 7' }));
+  assert.match(a.id, /^AS-\d{6}$/);
+  assert.equal(a.pdv_nome, P2.nome);
+  assert.equal(a.prenotazione, 'PR-0042');
+  assert.equal(a.causale, 'Prenotazione cliente');
+  assert.equal(a.stato, 'valido');
+  const e = ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: '' }), 'VALIDAZIONE');
+  assert.ok(e.details.campi.prenotazione);
+  ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: '', quantita: '1', prenotazione: 'X' }), 'VALIDAZIONE');
+  ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C2, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: 'X' }), 'VALIDAZIONE');
+  ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '0', prenotazione: 'X' }), 'VALIDAZIONE');
+  ko(call('saveAssegnazione', { data: '2026-10-15', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: 'X', causale: 'Richiesta del PDV' }), 'VALIDAZIONE');
+  const d = ok(call('getAll'));
+  assert.equal(d.assegnazioni.length, 1);
+  assert.equal(d.trasferimenti.some((t) => t.id === a.id) || d.resi.some((r) => r.id === a.id), false, 'le assegnazioni non finiscono tra trasferimenti o resi');
+});
+
+test('assegnazione: modifica tracciata, annullamento e ripristino', () => {
+  const a = ok(call('getAll')).assegnazioni[0];
+  const m = ok(call('saveAssegnazione', { id: a.id, atteso_modificato_il: a.modificato_il, data: a.data, catalogo_id: C1, premio_id: pr1.id, pdv_id: P1.id, quantita: '3', prenotazione: 'PR-0043' }));
+  assert.equal(m.quantita, '3');
+  assert.equal(m.pdv_id, P1.id);
+  ko(call('saveAssegnazione', { id: a.id, atteso_modificato_il: a.modificato_il, data: a.data, catalogo_id: C1, premio_id: pr1.id, pdv_id: P1.id, quantita: '4', prenotazione: 'PR-0043' }), 'CONFLITTO');
+  const log = ok(call('getRegistro', { entita_id: a.id }));
+  assert.deepEqual(log.map((r) => r.azione), ['modifica', 'crea']);
+  assert.ok(JSON.parse(log[0].dettagli).prenotazione, 'la modifica della prenotazione è nel registro');
+  const ann = ok(call('annullaOperazione', { tipo: 'assegnazione', id: a.id, motivo: 'prova', atteso_modificato_il: m.modificato_il }));
+  assert.equal(ann.operazione.stato, 'annullato');
+  ko(call('saveAssegnazione', { id: a.id, data: a.data, catalogo_id: C1, premio_id: pr1.id, pdv_id: P1.id, quantita: '1', prenotazione: 'PR-0043' }), 'VALIDAZIONE');
+  const rip = ok(call('ripristinaOperazione', { tipo: 'assegnazione', id: a.id, atteso_modificato_il: ann.operazione.modificato_il }));
+  assert.equal(rip.operazione.stato, 'valido');
+  ko(call('annullaOperazione', { tipo: 'assegnazione', id: 'AS-999999' }), 'NON_TROVATO');
+});
+
+test('nuova causale per le assegnazioni', () => {
+  const c = ok(call('saveCausale', { tipo: 'assegnazione', descrizione: 'Rifornimento PDV' }));
+  assert.equal(c.tipo, 'assegnazione');
+  ko(call('saveCausale', { tipo: 'assegnazione', descrizione: 'rifornimento pdv' }), 'DUPLICATO');
+  ok(call('saveAssegnazione', { data: '2026-10-16', catalogo_id: C1, premio_id: pr1.id, pdv_id: P2.id, quantita: '1', prenotazione: 'PR-0050', causale: 'Rifornimento PDV' }));
+});
+
+test('backup e ripristino includono le assegnazioni; vecchi backup senza assegnazioni restano validi', () => {
+  const backup = ok(call('exportBackup'));
+  assert.equal(backup.fogli.Assegnazioni.righe.length, 2);
+  const res = ok(call('restoreBackup', { backup: JSON.parse(JSON.stringify(backup)), conferma: 'RIPRISTINA' }));
+  assert.equal(res.conteggi.Assegnazioni, 2);
+  const vecchio = JSON.parse(JSON.stringify(backup));
+  delete vecchio.fogli.Assegnazioni;
+  const r2 = ok(call('restoreBackup', { backup: vecchio, conferma: 'RIPRISTINA' }));
+  assert.equal(r2.conteggi.Assegnazioni, 0);
+  assert.equal(ok(call('getAll')).assegnazioni.length, 0);
+});
+
+test('database già in uso senza assegnazioni: la tabella si crea da sola, i dati restano intatti', () => {
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'gestionale-migrazione-'));
+  const file2 = path.join(dir2, 'db.json');
+  const be2 = createBackend({ dataFile: file2, token: TOKEN });
+  be2.setup();
+  const c2 = (action, payload = {}) => be2.request({ token: TOKEN, action, payload, operatore: 'Test' });
+  const d0 = ok(c2('getAll'));
+  const pv = ok(c2('savePdv', { codice: 'V1', nome: 'Vecchio PDV' }));
+  const pr = ok(c2('savePremio', { catalogo_id: d0.cataloghi[0].id, codice: 'Z1', descrizione: 'Premio vecchio' }));
+  const pv2 = ok(c2('savePdv', { codice: 'V2', nome: 'Altro PDV' }));
+  ok(c2('saveTrasferimento', { data: '2026-10-01', catalogo_id: d0.cataloghi[0].id, premio_id: pr.id, pdv_origine_id: pv.id, pdv_destinazione_id: pv2.id, quantita: 5 }));
+  // Simula il database della versione precedente: niente foglio Assegnazioni e niente causali di quel tipo.
+  const st = JSON.parse(fs.readFileSync(file2, 'utf8'));
+  st.spreadsheet.order = st.spreadsheet.order.filter((n) => n !== 'Assegnazioni');
+  delete st.spreadsheet.sheets.Assegnazioni;
+  const cau = st.spreadsheet.sheets.Causali.cells;
+  const iTipo = cau[0].indexOf('tipo');
+  st.spreadsheet.sheets.Causali.cells = cau.filter((r, i) => i === 0 || r[iTipo] !== 'assegnazione');
+  fs.writeFileSync(file2, JSON.stringify(st));
+
+  const be3 = createBackend({ dataFile: file2, token: TOKEN });
+  const c3 = (action, payload = {}) => be3.request({ token: TOKEN, action, payload, operatore: 'Test' });
+  const d = ok(c3('getAll'));
+  assert.deepEqual(d.assegnazioni, []);
+  assert.equal(d.trasferimenti.length, 1, 'i trasferimenti esistenti restano');
+  assert.equal(d.causali.filter((c) => c.tipo === 'assegnazione').length, 2, 'causali delle assegnazioni aggiunte');
+  assert.equal(d.causali.filter((c) => c.tipo === 'reso').length, 5, 'le altre causali non vengono duplicate');
+  const a = ok(c3('saveAssegnazione', { data: '2026-10-15', catalogo_id: d0.cataloghi[0].id, premio_id: pr.id, pdv_id: pv.id, quantita: 1, prenotazione: '123' }));
+  assert.equal(a.id, 'AS-000001');
+  ok(c3('getAll'));
+  assert.equal(ok(c3('getAll')).causali.filter((c) => c.tipo === 'assegnazione').length, 2, 'la migrazione avviene una volta sola');
+});

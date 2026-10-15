@@ -31,17 +31,18 @@ Funziona **dal browser, senza installare nulla sul PC** (pensata anche per PC az
 
 | Sezione | Funzioni |
 |---|---|
-| **Dashboard** | Trasferimenti e resi del periodo (numero e quantità), premi più movimentati, PDV con più trasferimenti, attività recenti; filtri per periodo e stagione |
+| **Dashboard** | Trasferimenti, resi e assegnazioni del periodo (numero e quantità), premi più movimentati, PDV con più trasferimenti, attività recenti; filtri per periodo e stagione |
 | **Nuovo trasferimento** | Data precompilata, catalogo a un clic, ricerca immediata di PDV e premi per codice o nome, quantità, riferimento, causale, note. `Ctrl+Invio` salva; dopo il salvataggio restano catalogo, data, PDV, riferimento e causale e il cursore torna sul premio. Blocca origine = destinazione e avvisa dei possibili doppioni |
 | **Nuovo reso** | Reso indipendente oppure collegato a un trasferimento (premio e PDV compilati in automatico). Il reso **non modifica** il trasferimento |
-| **Storico operazioni** | Trasferimenti e resi in un'unica tabella; ricerca libera, filtri combinabili (date, tipo, stato, catalogo, PDV di origine/destinazione/coinvolto, premio, causale), ordinamento per data, paginazione, dettaglio con cronologia delle modifiche, modifica, annullamento e ripristino, esportazione dei risultati filtrati |
+| **Nuova assegnazione** | Premi che partono dal **Magazzino via Svezia 04** verso un punto vendita: PDV che riceve, **numero di prenotazione** (obbligatorio), premio, quantità, causale, riferimento e note. Avvisa se la stessa prenotazione è già stata registrata; dopo il salvataggio il cursore torna sul numero di prenotazione |
+| **Storico operazioni** | Trasferimenti, resi e assegnazioni in un'unica tabella (ricerca anche per numero di prenotazione); ricerca libera, filtri combinabili (date, tipo, stato, catalogo, PDV di origine/destinazione/coinvolto, premio, causale), ordinamento per data, paginazione, dettaglio con cronologia delle modifiche, modifica, annullamento e ripristino, esportazione dei risultati filtrati |
 | **Punti vendita** | Archivio con codice univoco, nome, indirizzo, città, due e-mail (con controllo del formato), note, attivo/non attivo; importazione ed esportazione CSV |
 | **Cataloghi premi** | Cataloghi 2025/2026 e 2026/2027 separati (vuoti all'inizio), aggiunta di nuove stagioni; premi con codice, descrizione, categoria, note, stato; importazione/esportazione CSV per catalogo |
 | **Statistiche** | Generali, per PDV e per premio con filtri per periodo, catalogo, premio, PDV e tipo di movimento; andamento mensile, confronto tra stagioni, causali, classifiche; esportazione CSV dei dati aggregati |
 | **Esportazioni e backup** | Tutti i CSV, copia di sicurezza su Google Drive, backup completo scaricabile (.json) e ripristino |
 | **Impostazioni** | Collegamento al database, nome operatore, separatore CSV, gestione delle causali |
 
-Scorciatoie: `Alt+1` … `Alt+9` per passare da una sezione all'altra; nelle caselle di ricerca `↑`/`↓` per scorrere, `Invio` o `Tab` per scegliere, `Esc` per chiudere.
+Scorciatoie: `Alt+1` … `Alt+9` e `Alt+0` (Impostazioni) per passare da una sezione all'altra; nelle caselle di ricerca `↑`/`↓` per scorrere, `Invio` o `Tab` per scegliere, `Esc` per chiudere.
 
 ---
 
@@ -196,6 +197,16 @@ I dati sono nel Foglio Google, separati dal codice: aggiornare il programma non 
 
 ---
 
+### Aggiornamento con le assegnazioni (ottobre 2026)
+
+1. Fai un backup (§7).
+2. Apri il Foglio Google › **Estensioni › Apps Script**, sostituisci tutto il contenuto di `Code.gs` con il nuovo [`apps-script/Code.gs`](apps-script/Code.gs) e salva.
+3. **Distribuisci › Gestisci distribuzioni › ✏️ Modifica › Versione: Nuova versione › Distribuisci.**
+
+Il foglio `Assegnazioni` e le causali «Prenotazione cliente» e «Altra causale» vengono creati da soli alla prima apertura dell'app: non serve eseguire `setup`. Il file `Index.html` della versione integrata non cambia. Finché lo script non è aggiornato l'app funziona come prima e la pagina «Nuova assegnazione» mostra un avviso.
+
+---
+
 ## 9. Uso da più PC e da più persone
 
 * Tutti i PC che usano lo stesso indirizzo e token lavorano sullo **stesso database**.
@@ -218,16 +229,17 @@ I dati sono nel Foglio Google, separati dal codice: aggiornare il programma non 
 
 ## 11. Struttura dei dati
 
-Ogni tabella è un foglio con la prima riga di intestazione. Tutte le celle sono in formato testo (niente conversioni automatiche di date o zeri iniziali dei codici). Identificativi progressivi stabili: `TR-000001` (trasferimenti), `RS-000001` (resi), `PV-…` (PDV), `PR-…` (premi), `CT-01` (cataloghi), `CA-…` (causali).
+Ogni tabella è un foglio con la prima riga di intestazione. Tutte le celle sono in formato testo (niente conversioni automatiche di date o zeri iniziali dei codici). Identificativi progressivi stabili: `TR-000001` (trasferimenti), `RS-000001` (resi), `AS-000001` (assegnazioni), `PV-…` (PDV), `PR-…` (premi), `CT-01` (cataloghi), `CA-…` (causali).
 
 | Foglio | Contenuto |
 |---|---|
 | `Cataloghi` | id, codice stagione (es. 2025/2026), nome, date di inizio/fine facoltative, attivo, ordine |
 | `Premi` | id, catalogo, codice, descrizione, categoria, note, attivo |
 | `PDV` | id, codice univoco, nome, indirizzo, città, e-mail, e-mail secondaria, note, attivo |
-| `Causali` | id, tipo (trasferimento/reso), descrizione, attivo, ordine |
+| `Causali` | id, tipo (trasferimento/reso/assegnazione), descrizione, attivo, ordine |
 | `Trasferimenti` | id, data, catalogo, premio (+ codice e descrizione storici), PDV origine e destinazione (+ codici e nomi storici), quantità, causale, riferimento, note, stato, creato il/da, modificato il/da, annullato il, motivo annullamento |
 | `Resi` | come sopra con il PDV che rende e l'eventuale trasferimento collegato |
+| `Assegnazioni` | come i resi, con il PDV che riceve dal Magazzino via Svezia 04 e il numero di prenotazione. Il foglio viene creato da solo alla prima richiesta dopo l'aggiornamento dello script |
 | `Registro` | ogni creazione, modifica (valori prima → dopo), annullamento, ripristino, importazione e ripristino backup, con data e operatore |
 | `ModelliEmail`, `InviiEmail` | vuote, per la fase 2 (§13) |
 | `Meta` | versione dello schema e contatori degli identificativi |
@@ -243,6 +255,7 @@ Ogni stagione futura si aggiunge da **Cataloghi premi › Nuovo catalogo** (es. 
 * Si usano **solo le operazioni valide**: le annullate sono escluse da totali, classifiche e grafici (restano visibili nello storico).
 * Nei totali generali **ogni trasferimento è contato una volta**. «In uscita» e «in entrata» sono sempre mostrati separati per ciascun PDV; la colonna «Movimentata» (uscita + entrata dello stesso PDV) serve solo a ordinare i negozi e la sua somma non è il totale trasferito.
 * I **resi** sono una tipologia distinta: non riducono i trasferimenti né la loro quantità.
+* Le **assegnazioni dal magazzino** non entrano nelle statistiche tra PDV (che restano uguali a prima): hanno i loro totali in Dashboard e Storico e il loro file CSV in Esportazioni.
 * **Rapporto resi/trasferiti** = quantità resa ÷ quantità trasferita, nello stesso periodo e con gli stessi filtri. È un indicatore, non un dato certo: un reso può riguardare premi arrivati senza un trasferimento registrato o trasferiti in un periodo diverso. Se non c'è nulla di trasferito appare «n.d.»; valori oltre il 100% sono segnalati con ⚠.
 * Il **confronto tra cataloghi** di un premio usa lo stesso codice premio nelle diverse stagioni (o la stessa descrizione se il premio non ha codice).
 * Non vengono calcolate giacenze di magazzino: è un gestionale dei movimenti.

@@ -1,5 +1,5 @@
 /**
- * GESTIONALE TRASFERIMENTI E RESI PREMI — Backend Google Apps Script
+ * GESTIONALE TRASFERIMENTI, RESI E ASSEGNAZIONI PREMI — Backend Google Apps Script
  *
  * Questo script va incollato nell'editor Apps Script di un Foglio Google
  * (Estensioni > Apps Script). Il Foglio Google è il database.
@@ -20,6 +20,8 @@
 var SCHEMA_VERSION = 1;
 var APP_NAME = 'Gestionale premi';
 var BACKUP_FOLDER = 'Backup Gestionale Premi';
+/** Da dove partono le assegnazioni: il magazzino centrale. */
+var MAGAZZINO = 'Magazzino via Svezia 04';
 
 /** Struttura delle tabelle (un foglio per entità). */
 var SHEETS = {
@@ -36,6 +38,10 @@ var SHEETS = {
   Resi: ['id', 'data', 'catalogo_id', 'premio_id', 'premio_codice', 'premio_descrizione',
     'pdv_id', 'pdv_codice', 'pdv_nome', 'quantita', 'causale', 'trasferimento_id', 'riferimento', 'note', 'stato',
     'creato_il', 'creato_da', 'modificato_il', 'modificato_da', 'annullato_il', 'motivo_annullamento'],
+  // Assegnazioni: premi che partono dal magazzino (via Svezia 04) verso un punto vendita.
+  Assegnazioni: ['id', 'data', 'catalogo_id', 'premio_id', 'premio_codice', 'premio_descrizione',
+    'pdv_id', 'pdv_codice', 'pdv_nome', 'quantita', 'causale', 'prenotazione', 'riferimento', 'note', 'stato',
+    'creato_il', 'creato_da', 'modificato_il', 'modificato_da', 'annullato_il', 'motivo_annullamento'],
   Registro: ['id', 'timestamp', 'entita', 'entita_id', 'azione', 'operatore', 'dettagli'],
   // Predisposizione per la fase 2 (invio e-mail ai PDV): tabelle vuote, nessun invio in questa versione.
   ModelliEmail: ['id', 'nome', 'oggetto', 'corpo', 'attivo', 'creato_il', 'modificato_il'],
@@ -43,7 +49,7 @@ var SHEETS = {
 };
 
 var ID_PREFIX = {
-  Cataloghi: 'CT', Premi: 'PR', PDV: 'PV', Causali: 'CA', Trasferimenti: 'TR', Resi: 'RS',
+  Cataloghi: 'CT', Premi: 'PR', PDV: 'PV', Causali: 'CA', Trasferimenti: 'TR', Resi: 'RS', Assegnazioni: 'AS',
   Registro: 'LG', ModelliEmail: 'ME', InviiEmail: 'IE'
 };
 
@@ -58,8 +64,12 @@ var SEED_CAUSALI = [
   { tipo: 'reso', descrizione: 'Reso richiesto dal PDV' },
   { tipo: 'reso', descrizione: 'Altra causale' },
   { tipo: 'trasferimento', descrizione: 'Richiesta del PDV' },
-  { tipo: 'trasferimento', descrizione: 'Altra causale' }
+  { tipo: 'trasferimento', descrizione: 'Altra causale' },
+  { tipo: 'assegnazione', descrizione: 'Prenotazione cliente' },
+  { tipo: 'assegnazione', descrizione: 'Altra causale' }
 ];
+/** Tabelle aggiunte dopo la prima versione: vengono create da sole se mancano (nessun setup da rifare). */
+var TABELLE_AGGIUNTE = ['Assegnazioni'];
 
 var MAX_QTA = 1000000;
 
@@ -118,6 +128,7 @@ var ACTIONS = {
   saveCausale: { write: true, fn: saveCausale_ },
   saveTrasferimento: { write: true, fn: saveTrasferimento_ },
   saveReso: { write: true, fn: saveReso_ },
+  saveAssegnazione: { write: true, fn: saveAssegnazione_ },
   annullaOperazione: { write: true, fn: annullaOperazione_ },
   ripristinaOperazione: { write: true, fn: ripristinaOperazione_ },
   importPdv: { write: true, fn: importPdv_ },
@@ -179,6 +190,8 @@ function setup() {
     appendRows_('Causali', SEED_CAUSALI.map(function (c, i) {
       return { id: cids[i], tipo: c.tipo, descrizione: c.descrizione, attivo: 'SI', ordine: String(i + 1), creato_il: now2, modificato_il: now2 };
     }));
+  } else {
+    aggiungiCausaliMancanti_();
   }
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('API_TOKEN');
@@ -262,8 +275,42 @@ function ensureSheet_(ss, name) {
 
 function checkSchema_() {
   var ss = ss_();
+  migra_(ss);
   var missing = Object.keys(SHEETS).filter(function (n) { return !ss.getSheetByName(n); });
   if (missing.length) fail_('CONFIG', 'Database non inizializzato (fogli mancanti: ' + missing.join(', ') + '). Esegui la funzione "setup".');
+}
+
+/**
+ * Aggiornamento automatico di un database già in uso: crea le tabelle aggiunte nelle versioni
+ * successive (es. Assegnazioni) e le loro causali iniziali. Non tocca i dati esistenti.
+ */
+function migra_(ss) {
+  var mancanti = TABELLE_AGGIUNTE.filter(function (n) { return !ss.getSheetByName(n); });
+  if (!mancanti.length) return;
+  // Se il database non è mai stato inizializzato ci pensa "setup": qui non si fa nulla.
+  if (!ss.getSheetByName('Causali')) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) fail_('OCCUPATO', 'Il database è occupato da un\'altra operazione. Riprova tra qualche secondo.');
+  try {
+    mancanti.forEach(function (n) { if (!ss.getSheetByName(n)) ensureSheet_(ss, n); });
+    aggiungiCausaliMancanti_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Aggiunge le causali iniziali dei tipi che non ne hanno ancora nessuna (es. assegnazione). */
+function aggiungiCausaliMancanti_() {
+  var esistenti = readAll_('Causali');
+  var tipi = {};
+  esistenti.forEach(function (c) { tipi[c.tipo] = true; });
+  var nuove = SEED_CAUSALI.filter(function (c) { return !tipi[c.tipo]; });
+  if (!nuove.length) return;
+  var now = nowIso_();
+  var ids = nextIds_('Causali', nuove.length);
+  appendRows_('Causali', nuove.map(function (c, i) {
+    return { id: ids[i], tipo: c.tipo, descrizione: c.descrizione, attivo: 'SI', ordine: String(esistenti.length + i + 1), creato_il: now, modificato_il: now };
+  }));
 }
 
 function sheet_(name) {
@@ -444,12 +491,12 @@ function checkVersion_(existing, atteso) {
 
 function getAll_() {
   var out = {};
-  ['Cataloghi', 'Premi', 'PDV', 'Causali', 'Trasferimenti', 'Resi'].forEach(function (n) {
+  ['Cataloghi', 'Premi', 'PDV', 'Causali', 'Trasferimenti', 'Resi', 'Assegnazioni'].forEach(function (n) {
     out[n] = readAll_(n).map(strip_);
   });
   return {
     cataloghi: out.Cataloghi, premi: out.Premi, pdv: out.PDV, causali: out.Causali,
-    trasferimenti: out.Trasferimenti, resi: out.Resi,
+    trasferimenti: out.Trasferimenti, resi: out.Resi, assegnazioni: out.Assegnazioni, magazzino: MAGAZZINO,
     schema: SCHEMA_VERSION, nome_database: ss_().getName(), ora: nowIso_()
   };
 }
@@ -676,7 +723,7 @@ function importPremi_(p, ctx) {
  * ==================================================================== */
 
 function saveCausale_(p, ctx) {
-  var v = { tipo: p.tipo === 'trasferimento' ? 'trasferimento' : (p.tipo === 'reso' ? 'reso' : ''), descrizione: str_(p.descrizione, 100), attivo: siNo_(bool_(p.attivo, true)), ordine: str_(p.ordine, 5) };
+  var v = { tipo: ['trasferimento', 'reso', 'assegnazione'].indexOf(p.tipo) >= 0 ? p.tipo : '', descrizione: str_(p.descrizione, 100), attivo: siNo_(bool_(p.attivo, true)), ordine: str_(p.ordine, 5) };
   if (!v.tipo) fail_('VALIDAZIONE', 'Tipo causale non valido.');
   if (!v.descrizione) fail_('VALIDAZIONE', 'La descrizione della causale è obbligatoria.');
   var rows = cached_(ctx, 'Causali');
@@ -712,6 +759,7 @@ function causaleValida_(ctx, tipo, testo, precedente) {
 
 var TR_FIELDS = ['data', 'catalogo_id', 'premio_id', 'pdv_origine_id', 'pdv_destinazione_id', 'quantita', 'causale', 'riferimento', 'note'];
 var RS_FIELDS = ['data', 'catalogo_id', 'premio_id', 'pdv_id', 'quantita', 'causale', 'trasferimento_id', 'riferimento', 'note'];
+var AS_FIELDS = ['data', 'catalogo_id', 'premio_id', 'pdv_id', 'quantita', 'causale', 'prenotazione', 'riferimento', 'note'];
 
 /** Controlla che un premio o PDV esista; se è disattivato è accettato solo se già presente nell'operazione. */
 function entita_(rows, id, etichetta, precedenteId, e, campo) {
@@ -813,16 +861,54 @@ function saveReso_(p, ctx) {
   return obj;
 }
 
+/** Assegnazione: premi che partono dal magazzino (via Svezia 04) verso un punto vendita. */
+function saveAssegnazione_(p, ctx) {
+  var rows = cached_(ctx, 'Assegnazioni');
+  var prev = null;
+  if (p.id) {
+    prev = findById_(rows, p.id);
+    if (!prev) fail_('NON_TROVATO', 'Assegnazione non trovata.');
+    if (prev.stato !== 'valido') fail_('VALIDAZIONE', 'Un\'assegnazione annullata non può essere modificata: ripristinala prima.');
+    checkVersion_(prev, p.atteso_modificato_il);
+  }
+  var e = {};
+  var c = commonOp_(p, ctx, prev, e);
+  var pdv = entita_(cached_(ctx, 'PDV'), str_(p.pdv_id, 20), 'Punto vendita di destinazione', prev ? prev.pdv_id : null, e, 'pdv_id');
+  var prenotazione = str_(p.prenotazione, 60);
+  if (!prenotazione) e.prenotazione = 'Il numero di prenotazione è obbligatorio.';
+  check_(e);
+  var causale = causaleValida_(ctx, 'assegnazione', str_(p.causale, 100), prev ? prev.causale : '');
+  var now = nowIso_();
+  var obj = prev ? strip_(prev) : { id: nextIds_('Assegnazioni', 1)[0], stato: 'valido', creato_il: now, creato_da: ctx.operatore, annullato_il: '', motivo_annullamento: '' };
+  obj.data = c.data; obj.catalogo_id = c.cat.id;
+  obj.premio_id = c.premio.id; obj.premio_codice = c.premio.codice; obj.premio_descrizione = c.premio.descrizione;
+  obj.pdv_id = pdv.id; obj.pdv_codice = pdv.codice; obj.pdv_nome = pdv.nome;
+  obj.quantita = String(c.quantita); obj.causale = causale; obj.prenotazione = prenotazione;
+  obj.riferimento = str_(p.riferimento, 100); obj.note = str_(p.note, 1000);
+  obj.modificato_il = now; obj.modificato_da = ctx.operatore;
+  if (prev) {
+    var d = diff_(prev, obj, AS_FIELDS);
+    if (!Object.keys(d).length) return strip_(prev);
+    updateRow_('Assegnazioni', prev._row, obj);
+    log_(ctx, 'Assegnazione', obj.id, 'modifica', d);
+  } else {
+    appendRows_('Assegnazioni', [obj]);
+    log_(ctx, 'Assegnazione', obj.id, 'crea', null);
+  }
+  return obj;
+}
+
 function opTable_(tipo) {
   if (tipo === 'trasferimento') return { sheet: 'Trasferimenti', label: 'Trasferimento' };
   if (tipo === 'reso') return { sheet: 'Resi', label: 'Reso' };
+  if (tipo === 'assegnazione') return { sheet: 'Assegnazioni', label: 'Assegnazione', femminile: true };
   fail_('RICHIESTA', 'Tipo operazione non valido.');
 }
 
 function annullaOperazione_(p, ctx) {
   var t = opTable_(p.tipo);
   var ex = findById_(cached_(ctx, t.sheet), str_(p.id, 20));
-  if (!ex) fail_('NON_TROVATO', t.label + ' non trovato.');
+  if (!ex) fail_('NON_TROVATO', t.label + (t.femminile ? ' non trovata.' : ' non trovato.'));
   if (ex.stato === 'annullato') fail_('VALIDAZIONE', 'Operazione già annullata.');
   checkVersion_(ex, p.atteso_modificato_il);
   var now = nowIso_();
@@ -842,7 +928,7 @@ function annullaOperazione_(p, ctx) {
 function ripristinaOperazione_(p, ctx) {
   var t = opTable_(p.tipo);
   var ex = findById_(cached_(ctx, t.sheet), str_(p.id, 20));
-  if (!ex) fail_('NON_TROVATO', t.label + ' non trovato.');
+  if (!ex) fail_('NON_TROVATO', t.label + (t.femminile ? ' non trovata.' : ' non trovato.'));
   if (ex.stato !== 'annullato') fail_('VALIDAZIONE', 'L\'operazione non è annullata.');
   checkVersion_(ex, p.atteso_modificato_il);
   if (!findById_(cached_(ctx, 'Premi'), ex.premio_id)) fail_('VALIDAZIONE', 'Il premio di questa operazione non esiste più.');
