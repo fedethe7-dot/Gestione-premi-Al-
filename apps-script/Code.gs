@@ -42,6 +42,13 @@ var SHEETS = {
   Assegnazioni: ['id', 'data', 'catalogo_id', 'premio_id', 'premio_codice', 'premio_descrizione',
     'pdv_id', 'pdv_codice', 'pdv_nome', 'quantita', 'causale', 'prenotazione', 'riferimento', 'note', 'stato',
     'creato_il', 'creato_da', 'modificato_il', 'modificato_da', 'annullato_il', 'motivo_annullamento'],
+  // Listino premi per la Ricerca premi: un premio (gruppo) con le sue versioni (varianti).
+  ListinoGruppi: ['id', 'chiave', 'stagione', 'nome', 'verifica', 'note_verifica', 'attivo', 'importazione_id', 'creato_il', 'modificato_il'],
+  ListinoVarianti: ['id', 'gruppo_id', 'stagione', 'codice', 'ean', 'codice_preconf', 'descrizione', 'modalita', 'punti', 'contributo',
+    'foglio', 'riga', 'attivo', 'importazione_id', 'creato_il', 'modificato_il'],
+  Importazioni: ['id', 'timestamp', 'operatore', 'tipo', 'file', 'stagioni', 'premi_nuovi', 'premi_aggiornati', 'premi_invariati',
+    'premi_da_verificare', 'varianti_nuove', 'varianti_aggiornate', 'non_presenti', 'disattivati', 'note'],
+  ListinoBackup: ['id', 'importazione_id', 'creato_il', 'parte', 'dati'],
   Registro: ['id', 'timestamp', 'entita', 'entita_id', 'azione', 'operatore', 'dettagli'],
   // Predisposizione per la fase 2 (invio e-mail ai PDV): tabelle vuote, nessun invio in questa versione.
   ModelliEmail: ['id', 'nome', 'oggetto', 'corpo', 'attivo', 'creato_il', 'modificato_il'],
@@ -50,6 +57,7 @@ var SHEETS = {
 
 var ID_PREFIX = {
   Cataloghi: 'CT', Premi: 'PR', PDV: 'PV', Causali: 'CA', Trasferimenti: 'TR', Resi: 'RS', Assegnazioni: 'AS',
+  ListinoGruppi: 'GP', ListinoVarianti: 'VA', Importazioni: 'IM', ListinoBackup: 'BK',
   Registro: 'LG', ModelliEmail: 'ME', InviiEmail: 'IE'
 };
 
@@ -69,7 +77,10 @@ var SEED_CAUSALI = [
   { tipo: 'assegnazione', descrizione: 'Altra causale' }
 ];
 /** Tabelle aggiunte dopo la prima versione: vengono create da sole se mancano (nessun setup da rifare). */
-var TABELLE_AGGIUNTE = ['Assegnazioni'];
+var TABELLE_AGGIUNTE = ['Assegnazioni', 'ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup'];
+/** Copie del listino conservate per il ripristino (le più vecchie vengono eliminate). */
+var MAX_COPIE_LISTINO = 10;
+var MAX_VARIANTI_IMPORT = 30000;
 
 var MAX_QTA = 1000000;
 
@@ -129,6 +140,9 @@ var ACTIONS = {
   saveTrasferimento: { write: true, fn: saveTrasferimento_ },
   saveReso: { write: true, fn: saveReso_ },
   saveAssegnazione: { write: true, fn: saveAssegnazione_ },
+  getListino: { write: false, fn: function () { return getListino_(); } },
+  importaListino: { write: true, fn: importaListino_ },
+  ripristinaListino: { write: true, fn: ripristinaListino_ },
   annullaOperazione: { write: true, fn: annullaOperazione_ },
   ripristinaOperazione: { write: true, fn: ripristinaOperazione_ },
   importPdv: { write: true, fn: importPdv_ },
@@ -941,6 +955,195 @@ function ripristinaOperazione_(p, ctx) {
 }
 
 /* ======================================================================
+ * Listino premi (Ricerca premi) e importazione da Excel
+ * ==================================================================== */
+
+/** Riscrive tutte le righe di un foglio (intestazione esclusa) in un'unica operazione. */
+function riscriviFoglio_(name, objs) {
+  var sh = sheet_(name);
+  var hdr = headers_(sh);
+  var lr = sh.getLastRow();
+  if (lr >= 2) sh.getRange(2, 1, lr - 1, sh.getMaxColumns()).clearContent();
+  if (!objs.length) return;
+  ensureCapacity_(sh, objs.length + 1);
+  var rng = sh.getRange(2, 1, objs.length, hdr.length);
+  rng.setNumberFormat('@');
+  rng.setValues(objs.map(function (o) { return hdr.map(function (h) { return cell_(o[h]); }); }));
+}
+
+function numeroTesto_(v, decimali) {
+  var s = String(v === null || v === undefined ? '' : v).trim().replace(',', '.');
+  if (s === '') return '';
+  var n = Number(s);
+  if (!isFinite(n) || n < 0) return null;
+  var f = Math.pow(10, decimali);
+  return String(Math.round(n * f) / f);
+}
+
+function getListino_() {
+  var backup = {};
+  readAll_('ListinoBackup').forEach(function (b) { backup[b.importazione_id] = true; });
+  var imp = readAll_('Importazioni').map(strip_).reverse().slice(0, 50);
+  imp.forEach(function (i) { i.ripristinabile = backup[i.id] ? 'SI' : 'NO'; });
+  return {
+    gruppi: readAll_('ListinoGruppi').map(strip_),
+    varianti: readAll_('ListinoVarianti').map(strip_),
+    importazioni: imp,
+    ora: nowIso_()
+  };
+}
+
+/** Salva una copia dello stato attuale del listino, collegata a un'importazione (per poterla annullare). */
+function copiaListino_(importazioneId) {
+  var dati = JSON.stringify({ gruppi: readAll_('ListinoGruppi').map(strip_), varianti: readAll_('ListinoVarianti').map(strip_) });
+  var parti = [];
+  for (var i = 0; i < dati.length; i += 40000) parti.push(dati.slice(i, i + 40000));
+  var now = nowIso_();
+  var ids = nextIds_('ListinoBackup', parti.length);
+  appendRows_('ListinoBackup', parti.map(function (p, i) { return { id: ids[i], importazione_id: importazioneId, creato_il: now, parte: String(i + 1), dati: p }; }));
+  // Tiene solo le copie più recenti.
+  var tutte = readAll_('ListinoBackup');
+  var ordine = [];
+  tutte.forEach(function (b) { if (ordine.indexOf(b.importazione_id) < 0) ordine.push(b.importazione_id); });
+  if (ordine.length > MAX_COPIE_LISTINO) {
+    var tieni = ordine.slice(-MAX_COPIE_LISTINO);
+    riscriviFoglio_('ListinoBackup', tutte.filter(function (b) { return tieni.indexOf(b.importazione_id) >= 0; }).map(strip_));
+  }
+}
+
+/**
+ * Importazione incrementale del listino. Il browser legge l'Excel e invia i premi già raggruppati;
+ * qui si confrontano con l'archivio: nuovi aggiunti, cambiati aggiornati, quelli non presenti nel file
+ * restano (o, solo se richiesto, vengono disattivati). Prima di scrivere si salva una copia ripristinabile.
+ */
+function importaListino_(p, ctx) {
+  var gruppiIn = Array.isArray(p.gruppi) ? p.gruppi : [];
+  if (!gruppiIn.length) fail_('VALIDAZIONE', 'Il file non contiene premi da importare.');
+  var stagioni = {};
+  var chiaviG = {}, chiaviV = {}, nVar = 0, errori = [];
+  var gruppi = gruppiIn.map(function (g, gi) {
+    var chiave = str_(g.chiave, 80), stagione = str_(g.stagione, 20), nome = str_(g.nome, 200);
+    if (!chiave || !stagione || !nome) errori.push('Premio n. ' + (gi + 1) + ': chiave, stagione o nome mancanti.');
+    if (chiaviG[chiave]) errori.push('Premio ripetuto nel file: ' + chiave + '.');
+    chiaviG[chiave] = true;
+    stagioni[stagione] = true;
+    var varianti = (Array.isArray(g.varianti) ? g.varianti : []).map(function (v) {
+      nVar++;
+      var codice = str_(v.codice, 30), ean = str_(v.ean, 30);
+      var modalita = v.modalita === 'contributo' ? 'contributo' : (v.modalita === 'pieno' ? 'pieno' : '');
+      var punti = numeroTesto_(v.punti, 0), contributo = numeroTesto_(v.contributo, 2);
+      if (!codice) errori.push(nome + ': una versione non ha il codice.');
+      if (!modalita) errori.push(nome + ' (' + codice + '): modalità non valida.');
+      if (punti === null) errori.push(nome + ' (' + codice + '): punti non validi.');
+      if (contributo === null) errori.push(nome + ' (' + codice + '): contributo non valido.');
+      var k = stagione + '#' + codice + '#' + ean;
+      if (chiaviV[k]) errori.push('Codice ' + codice + ' ripetuto due volte nella stagione ' + stagione + '.');
+      chiaviV[k] = true;
+      return { codice: codice, ean: ean, codice_preconf: str_(v.codice_preconf, 30), descrizione: str_(v.descrizione, 200), modalita: modalita,
+        punti: punti, contributo: contributo || '0', foglio: str_(v.foglio, 60), riga: str_(v.riga, 10) };
+    });
+    if (!varianti.length) errori.push(nome + ': nessuna versione (codice) indicata.');
+    return { chiave: chiave, stagione: stagione, nome: nome, verifica: g.verifica === 'da verificare' ? 'da verificare' : 'ok',
+      note_verifica: str_(g.note_verifica, 2000), varianti: varianti };
+  });
+  if (nVar > MAX_VARIANTI_IMPORT) fail_('VALIDAZIONE', 'Troppe righe in un solo file (massimo ' + MAX_VARIANTI_IMPORT + ').');
+  if (errori.length) fail_('VALIDAZIONE', 'Il file contiene dati non validi: ' + errori.slice(0, 5).join(' ') + (errori.length > 5 ? ' (e altri ' + (errori.length - 5) + ')' : ''), { errori: errori });
+
+  var impId = nextIds_('Importazioni', 1)[0];
+  copiaListino_(impId);
+  var now = nowIso_();
+  var G = readAll_('ListinoGruppi').map(strip_);
+  var V = readAll_('ListinoVarianti').map(strip_);
+  var gPerChiave = {}, vPerChiave = {};
+  G.forEach(function (g) { gPerChiave[g.chiave] = g; });
+  V.forEach(function (v) { vPerChiave[v.stagione + '#' + v.codice + '#' + v.ean] = v; });
+  var nuoviG = gruppi.filter(function (g) { return !gPerChiave[g.chiave]; }).length;
+  var idG = nextIds_('ListinoGruppi', nuoviG);
+  var nuoveV = 0;
+  gruppi.forEach(function (g) { g.varianti.forEach(function (v) { if (!vPerChiave[g.stagione + '#' + v.codice + '#' + v.ean]) nuoveV++; }); });
+  var idV = nextIds_('ListinoVarianti', nuoveV);
+  var cont = { premi_nuovi: 0, premi_aggiornati: 0, premi_invariati: 0, premi_da_verificare: 0, varianti_nuove: 0, varianti_aggiornate: 0, non_presenti: 0, disattivati: 0 };
+  var visteV = {}, visteG = {};
+  var CAMPI_V = ['gruppo_id', 'descrizione', 'modalita', 'punti', 'contributo', 'codice_preconf', 'attivo'];
+  gruppi.forEach(function (g) {
+    var esistente = gPerChiave[g.chiave];
+    var cambiato = false;
+    var gr;
+    if (esistente) {
+      gr = esistente;
+      if (gr.nome !== g.nome || gr.attivo !== 'SI') cambiato = true;
+      gr.nome = g.nome; gr.verifica = g.verifica; gr.note_verifica = g.note_verifica; gr.attivo = 'SI';
+    } else {
+      gr = { id: idG.shift(), chiave: g.chiave, stagione: g.stagione, nome: g.nome, verifica: g.verifica, note_verifica: g.note_verifica, attivo: 'SI', importazione_id: impId, creato_il: now, modificato_il: now };
+      G.push(gPerChiave[g.chiave] = gr);
+    }
+    visteG[gr.id] = true;
+    if (g.verifica === 'da verificare') cont.premi_da_verificare++;
+    g.varianti.forEach(function (v) {
+      var k = g.stagione + '#' + v.codice + '#' + v.ean;
+      visteV[k] = true;
+      var nuova = { gruppo_id: gr.id, descrizione: v.descrizione, modalita: v.modalita, punti: v.punti, contributo: v.contributo, codice_preconf: v.codice_preconf, attivo: 'SI' };
+      var ex = vPerChiave[k];
+      if (ex) {
+        var diversa = CAMPI_V.some(function (c) { return String(ex[c] || '') !== String(nuova[c] || ''); });
+        CAMPI_V.forEach(function (c) { ex[c] = nuova[c]; });
+        ex.foglio = v.foglio; ex.riga = v.riga;
+        if (diversa) { ex.modificato_il = now; ex.importazione_id = impId; cont.varianti_aggiornate++; cambiato = true; }
+      } else {
+        var r = { id: idV.shift(), stagione: g.stagione, codice: v.codice, ean: v.ean, foglio: v.foglio, riga: v.riga, importazione_id: impId, creato_il: now, modificato_il: now };
+        CAMPI_V.forEach(function (c) { r[c] = nuova[c]; });
+        V.push(vPerChiave[k] = r);
+        cont.varianti_nuove++;
+        cambiato = true;
+      }
+    });
+    if (!esistente) cont.premi_nuovi++;
+    else if (cambiato) { gr.modificato_il = now; gr.importazione_id = impId; cont.premi_aggiornati++; }
+    else cont.premi_invariati++;
+  });
+  // Versioni delle stesse stagioni che non sono nel file: restano, salvo richiesta esplicita.
+  var disattiva = p.disattiva_assenti === true;
+  V.forEach(function (v) {
+    if (!stagioni[v.stagione] || visteV[v.stagione + '#' + v.codice + '#' + v.ean] || v.attivo !== 'SI') return;
+    cont.non_presenti++;
+    if (disattiva) { v.attivo = 'NO'; v.modificato_il = now; v.importazione_id = impId; cont.disattivati++; }
+  });
+  if (disattiva) {
+    G.forEach(function (g) {
+      if (!stagioni[g.stagione] || visteG[g.id] || g.attivo !== 'SI') return;
+      g.attivo = 'NO'; g.modificato_il = now; g.importazione_id = impId;
+    });
+  }
+  riscriviFoglio_('ListinoGruppi', G);
+  riscriviFoglio_('ListinoVarianti', V);
+  var reg = { id: impId, timestamp: now, operatore: ctx.operatore, tipo: 'importazione', file: str_(p.file, 200), stagioni: Object.keys(stagioni).sort().join(', '), note: '' };
+  Object.keys(cont).forEach(function (k) { reg[k] = String(cont[k]); });
+  appendRows_('Importazioni', [reg]);
+  log_(ctx, 'Listino', impId, 'importa', cont);
+  return { importazione: reg, listino: getListino_() };
+}
+
+/** Riporta il listino allo stato precedente a un'importazione (a sua volta annullabile). */
+function ripristinaListino_(p, ctx) {
+  var id = str_(p.importazione_id, 20);
+  var parti = readAll_('ListinoBackup').filter(function (b) { return b.importazione_id === id; })
+    .sort(function (a, b) { return Number(a.parte) - Number(b.parte); });
+  if (!parti.length) fail_('NON_TROVATO', 'Non c\'è una copia del listino per l\'importazione ' + id + '.');
+  var copia;
+  try { copia = JSON.parse(parti.map(function (b) { return b.dati; }).join('')); } catch (e) { fail_('VALIDAZIONE', 'La copia del listino è danneggiata.'); }
+  var nuovoId = nextIds_('Importazioni', 1)[0];
+  copiaListino_(nuovoId);
+  riscriviFoglio_('ListinoGruppi', copia.gruppi || []);
+  riscriviFoglio_('ListinoVarianti', copia.varianti || []);
+  var reg = { id: nuovoId, timestamp: nowIso_(), operatore: ctx.operatore, tipo: 'ripristino', file: '', stagioni: '',
+    premi_nuovi: '', premi_aggiornati: '', premi_invariati: String((copia.gruppi || []).length), premi_da_verificare: '', varianti_nuove: '', varianti_aggiornate: '',
+    non_presenti: '', disattivati: '', note: 'Ripristinato il listino com\'era prima dell\'importazione ' + id + '.' };
+  appendRows_('Importazioni', [reg]);
+  log_(ctx, 'Listino', nuovoId, 'ripristina', { importazione: id });
+  return { importazione: reg, listino: getListino_() };
+}
+
+/* ======================================================================
  * Backup e ripristino
  * ==================================================================== */
 
@@ -984,8 +1187,11 @@ function restoreBackup_(p, ctx) {
   // Copia di sicurezza dello stato attuale prima di sovrascrivere.
   var sicurezza = backupDrive_();
   var conteggi = {};
+  var LISTINO = ['ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup'];
   Object.keys(SHEETS).forEach(function (name) {
     var f = b.fogli[name];
+    // Backup precedenti alla ricerca premi: il listino attuale resta com'è.
+    if (!f && LISTINO.indexOf(name) >= 0) { conteggi[name] = 'invariato'; return; }
     var sh = sheet_(name);
     var hdr = headers_(sh);
     var lr = sh.getLastRow();

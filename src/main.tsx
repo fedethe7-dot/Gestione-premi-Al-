@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  LuArrowRightLeft, LuChartColumn, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuPackagePlus, LuRefreshCw, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
+  LuArrowRightLeft, LuChartColumn, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuMenu, LuPackagePlus, LuRefreshCw, LuSearch, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
 } from 'react-icons/lu';
 import { Rotella } from './components/comuni.tsx';
 import { dataOraIt } from './lib/format.ts';
@@ -13,6 +13,7 @@ import { PaginaEsportazioni } from './pages/Esportazioni.tsx';
 import { PaginaImpostazioni } from './pages/Impostazioni.tsx';
 import { PaginaNuovaOperazione } from './pages/NuovaOperazione.tsx';
 import { PaginaPdv } from './pages/PuntiVendita.tsx';
+import { PaginaRicercaPremi } from './pages/RicercaPremi.tsx';
 import { PaginaStatistiche } from './pages/Statistiche.tsx';
 import { PaginaStorico } from './pages/Storico.tsx';
 import { ProviderDati, useDati } from './state/dati.tsx';
@@ -20,6 +21,7 @@ import { ProviderUi } from './state/ui.tsx';
 
 const VOCI = [
   { path: '', titolo: 'Dashboard', icona: LuLayoutDashboard },
+  { path: 'ricerca', titolo: 'Ricerca premi', icona: LuSearch },
   { path: 'trasferimento', titolo: 'Nuovo trasferimento', icona: LuArrowRightLeft },
   { path: 'reso', titolo: 'Nuovo reso', icona: LuUndo2 },
   { path: 'assegnazione', titolo: 'Nuova assegnazione', icona: LuPackagePlus },
@@ -35,14 +37,15 @@ const VOCI = [
 function App() {
   const { cfg, dati, caricamento, errore, ricarica, ultimoCaricamento } = useDati();
   const [rotta, setRotta] = useState<Rotta>(leggiRotta);
+  const [menu, setMenu] = useState(false);
 
   useEffect(() => {
-    const onHash = () => { setRotta(leggiRotta()); window.scrollTo(0, 0); };
+    const onHash = () => { setRotta(leggiRotta()); setMenu(false); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', onHash);
-    // Alt+1…9 e Alt+0 (decima voce): navigazione rapida tra le sezioni.
+    // Alt+1…9 e Alt+0 (Impostazioni, l'ultima voce): navigazione rapida tra le sezioni.
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && !e.ctrlKey && /^[0-9]$/.test(e.key)) {
-        const voce = VOCI[e.key === '0' ? 9 : Number(e.key) - 1];
+        const voce = VOCI[e.key === '0' ? VOCI.length - 1 : Number(e.key) - 1];
         if (voce) { e.preventDefault(); vai(voce.path); }
       }
     };
@@ -70,6 +73,7 @@ function App() {
   );
   else {
     switch (rotta.path) {
+      case 'ricerca': contenuto = <PaginaRicercaPremi params={rotta.params} />; break;
       case 'trasferimento': contenuto = <PaginaNuovaOperazione key="t" tipo="trasferimento" />; break;
       case 'reso': contenuto = <PaginaNuovaOperazione key="r" tipo="reso" params={rotta.params} />; break;
       case 'assegnazione': contenuto = <PaginaNuovaOperazione key="a" tipo="assegnazione" />; break;
@@ -83,8 +87,14 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Schermi piccoli: barra in alto con il menu a scomparsa. */}
+      <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 md:hidden">
+        <button className="btn-testo px-2 py-1.5" onClick={() => setMenu((m) => !m)} aria-label="Menu" aria-expanded={menu}><LuMenu size={20} /></button>
+        <span className="font-semibold">{configurato ? voce.titolo : 'Gestionale premi'}</span>
+      </div>
+      {menu && <div className="fixed inset-0 z-30 bg-slate-900/40 md:hidden" onClick={() => setMenu(false)} aria-hidden />}
+      <aside className={`${menu ? 'fixed inset-y-0 left-0 z-40 flex shadow-xl' : 'hidden'} h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:sticky md:top-0 md:flex md:shadow-none`}>
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3.5">
           <div className="grid h-8 w-8 place-items-center rounded-md bg-brand-600 text-white"><LuArrowRightLeft /></div>
           <div className="leading-tight">
@@ -99,7 +109,7 @@ function App() {
             return (
               <a key={v.path} href={'#/' + v.path} aria-current={att ? 'page' : undefined}
                 className={`mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 ${att ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-700 hover:bg-slate-100'} ${!configurato && v.path !== 'impostazioni' ? 'pointer-events-none opacity-40' : ''}`}
-                title={i < 10 ? `Alt+${(i + 1) % 10}` : undefined}>
+                title={i < 9 ? `Alt+${i + 1}` : i === VOCI.length - 1 ? 'Alt+0' : undefined}>
                 <Icona className="shrink-0" size={17} aria-hidden />
                 <span className="flex-1">{v.titolo}</span>
               </a>
@@ -121,7 +131,7 @@ function App() {
           </div>
         )}
       </aside>
-      <main className="min-w-0 flex-1 px-6 py-5">{contenuto}</main>
+      <main className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-5">{contenuto}</main>
     </div>
   );
 }

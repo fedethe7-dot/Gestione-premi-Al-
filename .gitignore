@@ -8,6 +8,7 @@ emulatore/dati/
 *.json.bak
 backup-gestionale-premi_*.json
 *.xlsx
+!test/fixtures/*.xlsx
 dati-reali/
 
 # Sistema / editor

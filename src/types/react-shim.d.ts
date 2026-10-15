@@ -12,6 +12,7 @@ declare module 'react' {
   export function useState<S>(initial: S | (() => S)): [S, Dispatch<SetStateAction<S>>];
   export function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
   export function useLayoutEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
+  export function useDeferredValue<T>(value: T): T;
   export function useMemo<T>(factory: () => T, deps: readonly unknown[]): T;
   export function useCallback<T extends (...args: never[]) => unknown>(cb: T, deps: readonly unknown[]): T;
   export interface RefObject<T> { current: T }
@@ -92,6 +93,7 @@ declare module 'react-icons/lu' {
   export const LuDatabaseBackup: Icon; export const LuCloudUpload: Icon; export const LuLink: Icon; export const LuMail: Icon;
   export const LuEraser: Icon; export const LuPackage: Icon; export const LuPackagePlus: Icon; export const LuWarehouse: Icon; export const LuCircleCheck: Icon; export const LuCircleAlert: Icon;
   export const LuArrowLeftRight: Icon; export const LuFilter: Icon; export const LuExternalLink: Icon;
+  export const LuCopy: Icon; export const LuFileSpreadsheet: Icon; export const LuSearchCheck: Icon; export const LuMenu: Icon;
 }
 
 declare const __APP_VERSION__: string;

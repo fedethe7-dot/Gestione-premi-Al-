@@ -13,6 +13,7 @@ Funziona **dal browser, senza installare nulla sul PC** (pensata anche per PC az
 3. [Installazione (una sola volta)](#3-installazione-una-sola-volta)
 4. [Uso quotidiano su Windows](#4-uso-quotidiano-su-windows)
 5. [Importare punti vendita e cataloghi](#5-importare-punti-vendita-e-cataloghi)
+   * [Ricerca premi e listino Excel](#ricerca-premi-e-listino-excel)
 6. [Esportare i CSV](#6-esportare-i-csv)
 7. [Backup e ripristino](#7-backup-e-ripristino)
 8. [Aggiornare il programma senza perdere i dati](#8-aggiornare-il-programma-senza-perdere-i-dati)
@@ -32,6 +33,7 @@ Funziona **dal browser, senza installare nulla sul PC** (pensata anche per PC az
 | Sezione | Funzioni |
 |---|---|
 | **Dashboard** | Trasferimenti, resi e assegnazioni del periodo (numero e quantità), premi più movimentati, PDV con più trasferimenti, attività recenti; filtri per periodo e stagione |
+| **Ricerca premi** | Cerca un premio per nome (anche parziale, con piccoli errori di battitura) o per codice (anche parziale, con o senza zero iniziale, anche EAN). Ogni premio mostra tutte le sue versioni: **senza contributo** (punteggio pieno) e **con contributo** (punti ridotti + euro); se si cerca un codice, la versione corrispondente è evidenziata. Pulsante per copiare il codice. Il listino si aggiorna caricando il file Excel dei premi (anteprima delle differenze, conferma, storico e annullamento) |
 | **Nuovo trasferimento** | Data precompilata, catalogo a un clic, ricerca immediata di PDV e premi per codice o nome, quantità, riferimento, causale, note. `Ctrl+Invio` salva; dopo il salvataggio restano catalogo, data, PDV, riferimento e causale e il cursore torna sul premio. Blocca origine = destinazione e avvisa dei possibili doppioni |
 | **Nuovo reso** | Reso indipendente oppure collegato a un trasferimento (premio e PDV compilati in automatico). Il reso **non modifica** il trasferimento |
 | **Nuova assegnazione** | Premi che partono dal **Magazzino via Svezia 04** verso un punto vendita: PDV che riceve, **numero di prenotazione** (facoltativo), premio, quantità, causale, riferimento e note. Avvisa se la stessa prenotazione è già stata registrata; dopo il salvataggio il cursore torna sul numero di prenotazione |
@@ -42,7 +44,7 @@ Funziona **dal browser, senza installare nulla sul PC** (pensata anche per PC az
 | **Esportazioni e backup** | Tutti i CSV, copia di sicurezza su Google Drive, backup completo scaricabile (.json) e ripristino |
 | **Impostazioni** | Collegamento al database, nome operatore, separatore CSV, gestione delle causali |
 
-Scorciatoie: `Alt+1` … `Alt+9` e `Alt+0` (Impostazioni) per passare da una sezione all'altra; nelle caselle di ricerca `↑`/`↓` per scorrere, `Invio` o `Tab` per scegliere, `Esc` per chiudere.
+Scorciatoie: `Alt+1` … `Alt+9` (le prime nove voci del menu) e `Alt+0` (Impostazioni) per passare da una sezione all'altra; nelle caselle di ricerca `↑`/`↓` per scorrere, `Invio` o `Tab` per scegliere, `Esc` per chiudere.
 
 ---
 
@@ -159,6 +161,27 @@ Regole: il codice PDV è univoco; il codice premio è univoco **all'interno del 
 
 ---
 
+### Ricerca premi e listino Excel
+
+La **Ricerca premi** usa un archivio separato dai cataloghi: il *listino*, letto dal file Excel dei premi del concorso. Ogni premio raggruppa le sue versioni: la versione a punteggio pieno e quella con punti ridotti + contributo (nel file sono righe diverse, quella con contributo ha di solito «C/A» nel nome e il codice della versione piena nella colonna *COD. PRECONFEZ.*). I codici restano testo (gli zeri iniziali non si perdono), punti e contributo sono numeri e non vengono mai sommati tra versioni.
+
+**Caricare o aggiornare il listino (anche durante l'anno)**
+
+1. Apri **Ricerca premi › Aggiorna listino** e trascina il file `.xlsx` (va bene il file del concorso con un foglio per stagione, oppure il file riorganizzato con il foglio «Varianti»). Il file viene letto sul PC: nulla viene inviato finché non confermi.
+2. Controlla i **fogli trovati**: per ogni foglio si vedono la stagione (ricavata dal nome del foglio, es. «2027-2026» → 2026/2027; si può correggere) e le colonne riconosciute. Togli la spunta ai fogli che non vuoi importare.
+3. Leggi l'**anteprima**: premi nuovi, aggiornati (con punti e contributo prima → dopo), invariati, da verificare, codici già associati a un altro premio, codici in archivio che mancano dal file.
+4. Premi **Conferma importazione**. Al termine compare il resoconto (aggiunti, aggiornati, invariati, da verificare).
+
+Regole dell'aggiornamento:
+
+* è **incrementale**: aggiunge i nuovi e aggiorna i cambiati; i premi che mancano dal file **restano** in archivio. Solo se metti la spunta «Disattiva i codici non presenti nel file» vengono disattivati (non cancellati). Lasciala vuota quando il file contiene solo una parte dei premi (es. un'integrazione di metà anno);
+* si confrontano solo le stagioni presenti nel file: caricare la 2026/2027 non tocca le altre;
+* reimportare lo stesso file non crea doppioni (risulta tutto «invariato»);
+* prima di ogni importazione viene salvata una **copia del listino**; nello **Storico aggiornamenti del listino** il pulsante **Annulla** riporta il listino com'era prima di quell'operazione (si conservano le ultime 10 copie; anche l'annullamento si può annullare);
+* i premi con abbinamenti dubbi (codice ripetuto, EAN che non corrisponde al codice, versione con contributo senza versione piena) vengono importati con il segnale **Da verificare**, visibile nella ricerca con il motivo.
+
+Per un nuovo premio aggiunto a metà anno basta aggiungere le sue righe al file Excel della stagione (stesse colonne) e ricaricarlo: risulteranno nuovi solo quei premi.
+
 ## 6. Esportare i CSV
 
 * **Esportazioni e backup**: trasferimenti, resi, storico completo, punti vendita, catalogo premi (uno o tutti), statistiche per PDV e per premio; con filtri per periodo e catalogo e la scelta di includere le operazioni annullate.
@@ -196,6 +219,15 @@ I dati sono nel Foglio Google, separati dal codice: aggiornare il programma non 
 * **Backend** (`apps-script/Code.gs`): prima fai un backup (§7), poi incolla il nuovo codice nell'editor Apps Script, salva, esegui `setup` (aggiunge eventuali nuove colonne senza toccare i dati) e poi **Distribuisci › Gestisci distribuzioni › ✏️ Modifica › Versione: Nuova versione › Distribuisci**. Così l'indirizzo `/exec` resta lo stesso e non serve riconfigurare i PC.
 
 ---
+
+### Aggiornamento con la ricerca premi (ottobre 2026)
+
+1. Fai un backup (§7).
+2. In Apps Script sostituisci tutto il contenuto di `Code.gs` con il nuovo [`apps-script/Code.gs`](apps-script/Code.gs) e salva.
+3. **Distribuisci › Gestisci distribuzioni › ✏️ Modifica › Versione: Nuova versione › Distribuisci.**
+4. Apri **Ricerca premi › Aggiorna listino** e carica il file Excel dei premi.
+
+I fogli `ListinoGruppi`, `ListinoVarianti`, `Importazioni` e `ListinoBackup` si creano da soli: non serve eseguire `setup` e `Index.html` non cambia. Finché lo script non è aggiornato, la pagina Ricerca premi mostra un avviso e il resto funziona come prima. I backup `.json` fatti prima di questo aggiornamento restano validi: ripristinandoli il listino attuale non viene toccato.
 
 ### Aggiornamento con le assegnazioni (ottobre 2026)
 
@@ -240,6 +272,10 @@ Ogni tabella è un foglio con la prima riga di intestazione. Tutte le celle sono
 | `Trasferimenti` | id, data, catalogo, premio (+ codice e descrizione storici), PDV origine e destinazione (+ codici e nomi storici), quantità, causale, riferimento, note, stato, creato il/da, modificato il/da, annullato il, motivo annullamento |
 | `Resi` | come sopra con il PDV che rende e l'eventuale trasferimento collegato |
 | `Assegnazioni` | come i resi, con il PDV che riceve dal Magazzino via Svezia 04 e il numero di prenotazione. Il foglio viene creato da solo alla prima richiesta dopo l'aggiornamento dello script |
+| `ListinoGruppi` | premi del listino: id (`GP-…`), chiave stabile (stagione + codice principale), stagione, nome, verifica (ok / da verificare) con note, attivo, importazione che l'ha creato o modificato |
+| `ListinoVarianti` | versioni dei premi: id (`VA-…`), premio, stagione, codice, EAN, codice preconfezionato originale, descrizione originale, modalità (`pieno` / `contributo`), punti, contributo in euro, foglio e riga di origine, attivo |
+| `Importazioni` | storico degli aggiornamenti del listino (`IM-…`): data, operatore, tipo (importazione / ripristino), file, stagioni, conteggi |
+| `ListinoBackup` | copie del listino prima di ogni importazione (testo JSON in parti), per l'annullamento |
 | `Registro` | ogni creazione, modifica (valori prima → dopo), annullamento, ripristino, importazione e ripristino backup, con data e operatore |
 | `ModelliEmail`, `InviiEmail` | vuote, per la fase 2 (§13) |
 | `Meta` | versione dello schema e contatori degli identificativi |
@@ -282,7 +318,7 @@ npm install
 npm run emulatore        :: backend simulato su http://localhost:8787 (il token viene stampato a video)
 npm run dev              :: interfaccia su http://localhost:5173 con ricompilazione automatica
 npm run typecheck        :: controllo dei tipi TypeScript
-npm test                 :: test automatici del backend e delle statistiche/CSV
+npm test                 :: test automatici del backend, delle statistiche/CSV e del listino premi
 npm run build            :: compila l'interfaccia nella cartella docs/ (da caricare su GitHub)
 ```
 
@@ -291,6 +327,8 @@ L'**emulatore** (`emulatore/`) esegue il vero `apps-script/Code.gs` dentro Node 
 Tecnologie: React 19 + TypeScript, Tailwind CSS 4, esbuild (compilazione), Google Apps Script (backend), Fogli Google (database). Per tenere le dipendenze al minimo, i tipi di React usati dal progetto sono dichiarati in `src/types/react-shim.d.ts` invece di installare `@types/react`.
 
 ### Verifiche eseguite su questa versione
+
+Test del listino premi (`test/listino.test.ts`, con il file di prova `test/fixtures/premi-prova.xlsx` a dati di esempio): lettura dell'Excel e codici come testo, caso DECESPUGLIATORE ELETTRICO (0406454 · 9.900 punti; 0406455 · 5.200 punti + 49,00 €), varianti senza «C/A», nomi con «C/» che non sono varianti, codice ripetuto risolto con l'EAN, versione orfana, ricerca per nome, parti di nome, codici completi e parziali con evidenziazione, refusi, confronto con l'archivio, rilettura del file riorganizzato; nel backend: importazione, reimportazione senza doppioni, aggiornamento di punti e contributo, premi assenti conservati o disattivati solo su richiesta, ripristino, persistenza dopo il riavvio, dati non validi, database esistente senza tabelle del listino, backup. Con `PREMI_XLSX=percorso\Premi.xlsx npm test` si verifica anche il file reale.
 
 Test automatici (`npm test`): 16 test sul backend reale nell'emulatore (sicurezza del token, setup, PDV, premi per catalogo, trasferimenti e validazioni, testi che sembrano formule, resi indipendenti e collegati, modifica con controllo dei conflitti e nomi storici, annullamento/ripristino, PDV disattivati, importazioni con duplicati ed errori, nuovo catalogo e causale, persistenza dopo il riavvio, backup e ripristino) e 11 test sulle statistiche e sui CSV.
 
@@ -310,10 +348,11 @@ gestionale-premi/
 ├─ docs/                   applicazione compilata, pubblicata da GitHub Pages
 ├─ src/                    codice sorgente dell'interfaccia (React + TypeScript)
 │  ├─ main.tsx             menu, navigazione, avvio
-│  ├─ pages/               Dashboard, NuovaOperazione, Storico, PuntiVendita, Cataloghi,
+│  ├─ pages/               Dashboard, RicercaPremi, NuovaOperazione, Storico, PuntiVendita, Cataloghi,
 │  │                       Statistiche, Esportazioni, Impostazioni, Benvenuto
 │  ├─ components/          modulo operazioni, ricerca con tastiera, importazione CSV, grafici, finestre
-│  ├─ lib/                 statistiche, CSV, esportazioni, API, formati, tipi
+│  ├─ lib/                 statistiche, CSV, esportazioni, API, formati, tipi,
+│  │                       xlsx.ts (lettore Excel senza librerie), listino.ts (raggruppamento e ricerca premi)
 │  ├─ state/               dati condivisi, avvisi e conferme, annullamento/ripristino
 │  └─ styles.css, index.html
 ├─ emulatore/              backend simulato per sviluppo e test (non serve in produzione)
