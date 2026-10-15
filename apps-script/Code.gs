@@ -49,6 +49,8 @@ var SHEETS = {
   Importazioni: ['id', 'timestamp', 'operatore', 'tipo', 'file', 'stagioni', 'premi_nuovi', 'premi_aggiornati', 'premi_invariati',
     'premi_da_verificare', 'varianti_nuove', 'varianti_aggiornate', 'non_presenti', 'disattivati', 'note'],
   ListinoBackup: ['id', 'importazione_id', 'creato_il', 'parte', 'dati'],
+  // Riepiloghi degli export "Prenotazioni premi" di Jasper: solo totali, mai le righe dei clienti.
+  RiepiloghiJasper: ['id', 'caricato_il', 'operatore', 'file', 'data_report', 'righe', 'pezzi', 'contributo', 'dati'],
   Registro: ['id', 'timestamp', 'entita', 'entita_id', 'azione', 'operatore', 'dettagli'],
   // Predisposizione per la fase 2 (invio e-mail ai PDV): tabelle vuote, nessun invio in questa versione.
   ModelliEmail: ['id', 'nome', 'oggetto', 'corpo', 'attivo', 'creato_il', 'modificato_il'],
@@ -57,7 +59,7 @@ var SHEETS = {
 
 var ID_PREFIX = {
   Cataloghi: 'CT', Premi: 'PR', PDV: 'PV', Causali: 'CA', Trasferimenti: 'TR', Resi: 'RS', Assegnazioni: 'AS',
-  ListinoGruppi: 'GP', ListinoVarianti: 'VA', Importazioni: 'IM', ListinoBackup: 'BK',
+  ListinoGruppi: 'GP', ListinoVarianti: 'VA', Importazioni: 'IM', ListinoBackup: 'BK', RiepiloghiJasper: 'RJ',
   Registro: 'LG', ModelliEmail: 'ME', InviiEmail: 'IE'
 };
 
@@ -77,7 +79,7 @@ var SEED_CAUSALI = [
   { tipo: 'assegnazione', descrizione: 'Altra causale' }
 ];
 /** Tabelle aggiunte dopo la prima versione: vengono create da sole se mancano (nessun setup da rifare). */
-var TABELLE_AGGIUNTE = ['Assegnazioni', 'ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup'];
+var TABELLE_AGGIUNTE = ['Assegnazioni', 'ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup', 'RiepiloghiJasper'];
 /** Copie del listino conservate per il ripristino (le più vecchie vengono eliminate). */
 var MAX_COPIE_LISTINO = 10;
 var MAX_VARIANTI_IMPORT = 30000;
@@ -88,11 +90,12 @@ var MAX_QTA = 1000000;
  * Ingresso HTTP
  * ==================================================================== */
 
-function doGet() {
+function doGet(e) {
   // Versione integrata: se nel progetto c'è il file HTML "Index", l'applicazione si apre da qui.
   var pagina = null;
-  try { pagina = HtmlService.createHtmlOutputFromFile('Index'); } catch (e) { pagina = null; }
+  try { pagina = HtmlService.createHtmlOutputFromFile('Index'); } catch (err) { pagina = null; }
   if (pagina) {
+    pagina = HtmlService.createHtmlOutput(paginaIntegrata_(pagina.getContent(), e && e.parameter ? e.parameter : {}));
     return pagina
       .setTitle(APP_NAME)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -148,6 +151,8 @@ var ACTIONS = {
   importPdv: { write: true, fn: importPdv_ },
   importPremi: { write: true, fn: importPremi_ },
   backupDrive: { write: true, fn: function () { return backupDrive_(); } },
+  getJasper: { write: false, fn: getJasper_ },
+  saveRiepilogoJasper: { write: true, fn: saveRiepilogoJasper_ },
   exportBackup: { write: false, fn: exportBackup_ },
   restoreBackup: { write: true, fn: restoreBackup_ }
 };
@@ -247,6 +252,13 @@ function onOpen() {
     SpreadsheetApp.getUi().createMenu(APP_NAME)
       .addItem('Mostra token API', 'mostraToken')
       .addItem('Crea copia di sicurezza ora', 'backupAutomatico')
+      .addSeparator()
+      .addItem('Collega GitHub (repository privato)…', 'collegaGithub')
+      .addItem('Aggiorna il programma ora', 'aggiornaProgramma')
+      .addSeparator()
+      .addItem('Attiva promemoria export Jasper', 'attivaPromemoriaJasper')
+      .addItem('Disattiva promemoria export Jasper', 'disattivaPromemoriaJasper')
+      .addItem('Invia ora un promemoria di prova', 'promemoriaJasperProva')
       .addToUi();
   } catch (e) { /* contesto senza interfaccia */ }
 }
@@ -1187,7 +1199,7 @@ function restoreBackup_(p, ctx) {
   // Copia di sicurezza dello stato attuale prima di sovrascrivere.
   var sicurezza = backupDrive_();
   var conteggi = {};
-  var LISTINO = ['ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup'];
+  var LISTINO = ['ListinoGruppi', 'ListinoVarianti', 'Importazioni', 'ListinoBackup', 'RiepiloghiJasper'];
   Object.keys(SHEETS).forEach(function (name) {
     var f = b.fogli[name];
     // Backup precedenti alla ricerca premi: il listino attuale resta com'è.
@@ -1211,4 +1223,224 @@ function restoreBackup_(p, ctx) {
   });
   log_(ctx, 'Database', '', 'ripristino_backup', { backup_del: b.creato_il, copia_sicurezza: sicurezza.nome });
   return { conteggi: conteggi, copia_sicurezza: sicurezza };
+}
+
+/* ======================================================================
+ * Programma caricato da GitHub (anche con repository privato)
+ *
+ * La pagina integrata (Index.html) di solito scarica app.js e app.css da GitHub Pages.
+ * Se nelle Proprietà dello script c'è GITHUB_TOKEN (menu "Collega GitHub"), è il server
+ * Google a leggere i due file dal repository, anche privato, e li inserisce nella pagina:
+ * il PC dell'utente non contatta mai GitHub e il codice non deve essere pubblico.
+ * ==================================================================== */
+
+var GITHUB_REPO = 'fedethe7-dot/Gestione-premi-Al-';
+var GITHUB_RAMO = 'main';
+var CACHE_ORE = 6;
+
+function paginaIntegrata_(html, parametri) {
+  var extra = '';
+  // Link diretto a una sezione (es. dal promemoria: …/exec?sezione=jasper).
+  var sezione = String((parametri && parametri.sezione) || '').replace(/[^a-z]/g, '').slice(0, 30);
+  if (sezione) extra += '<script>if(!location.hash||location.hash==="#"||location.hash==="#/")location.hash="#/' + sezione + '";</script>';
+  var programma = null, errore = '';
+  try { programma = programmaDaGithub_(); } catch (err) { errore = (err && err.message) || String(err); }
+  if (programma) {
+    extra += '<script>window.__PROGRAMMA_INCORPORATO__=true;</script>'
+      + '<style>' + programma.css.replace(/<\/style/gi, '<\\/style') + '</style>'
+      + '<script type="module">' + programma.js.replace(/<\/script/gi, '<\\/script') + '</script>';
+  } else if (errore) {
+    extra += '<script>window.__ERRORE_GITHUB__=' + JSON.stringify('Lettura da GitHub non riuscita: ' + errore) + ';</script>';
+  }
+  if (!extra) return html;
+  // Subito dopo il contenitore dell'app: prima del caricatore, che così sa di non dover scaricare nulla.
+  var segno = '<div id="root"></div>';
+  return html.indexOf(segno) >= 0 ? html.replace(segno, segno + extra) : extra + html;
+}
+
+function chiamaGithub_(percorso, accept, token) {
+  var r = UrlFetchApp.fetch('https://api.github.com/repos/' + GITHUB_REPO + percorso, {
+    headers: { Authorization: 'Bearer ' + token, Accept: accept, 'X-GitHub-Api-Version': '2022-11-28' },
+    muteHttpExceptions: true
+  });
+  var code = r.getResponseCode();
+  if (code === 401) throw new Error('token GitHub non valido o scaduto (menu "Collega GitHub")');
+  if (code === 403 || code === 404) throw new Error('il token non ha accesso al repository ' + GITHUB_REPO + ' (codice ' + code + ')');
+  if (code !== 200) throw new Error('GitHub ha risposto con il codice ' + code);
+  return r.getContentText('UTF-8');
+}
+
+function cacheLeggi_(cache, chiave) {
+  var n = cache.get(chiave + ':n');
+  if (n === null) return null;
+  var chiavi = [];
+  for (var i = 0; i < Number(n); i++) chiavi.push(chiave + ':' + i);
+  var parti = cache.getAll(chiavi);
+  var out = '';
+  for (var j = 0; j < chiavi.length; j++) {
+    if (parti[chiavi[j]] === undefined || parti[chiavi[j]] === null) return null;
+    out += parti[chiavi[j]];
+  }
+  return out;
+}
+
+function cacheScrivi_(cache, chiave, testo) {
+  var PEZZO = 40000; // la cache accetta al massimo 100 KB per valore
+  var valori = {}, n = 0;
+  for (var i = 0; i < testo.length; i += PEZZO) valori[chiave + ':' + (n++)] = testo.slice(i, i + PEZZO);
+  valori[chiave + ':n'] = String(n);
+  try { cache.putAll(valori, CACHE_ORE * 3600); } catch (e) { /* cache piena: si rilegge da GitHub la prossima volta */ }
+}
+
+/** Restituisce { versione, css, js } dal repository, oppure null se GitHub non è collegato. */
+function programmaDaGithub_() {
+  var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+  if (!token) return null;
+  var cache = CacheService.getScriptCache();
+  var versione = cache.get('gh_versione');
+  if (!versione) {
+    versione = chiamaGithub_('/commits/' + GITHUB_RAMO, 'application/vnd.github.sha', token).trim();
+    cache.put('gh_versione', versione, 120);
+  }
+  var css = cacheLeggi_(cache, 'gh_css_' + versione);
+  var js = cacheLeggi_(cache, 'gh_js_' + versione);
+  if (css === null || js === null) {
+    css = chiamaGithub_('/contents/docs/app.css?ref=' + versione, 'application/vnd.github.raw', token);
+    js = chiamaGithub_('/contents/docs/app.js?ref=' + versione, 'application/vnd.github.raw', token);
+    cacheScrivi_(cache, 'gh_css_' + versione, css);
+    cacheScrivi_(cache, 'gh_js_' + versione, js);
+  }
+  return { versione: versione, css: css, js: js };
+}
+
+/** Menu del foglio: salva il token GitHub (sola lettura del repository) e lo verifica. */
+function collegaGithub() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Collega GitHub',
+    'Incolla il token GitHub (fine-grained, accesso al solo repository ' + GITHUB_REPO + ', permesso "Contents: Read-only").\n'
+    + 'Lascia vuoto e premi OK per scollegare.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var token = r.getResponseText().trim();
+  var props = PropertiesService.getScriptProperties();
+  CacheService.getScriptCache().remove('gh_versione');
+  if (!token) {
+    props.deleteProperty('GITHUB_TOKEN');
+    ui.alert('GitHub scollegato: il programma verrà caricato di nuovo da GitHub Pages.');
+    return;
+  }
+  try {
+    var versione = chiamaGithub_('/commits/' + GITHUB_RAMO, 'application/vnd.github.sha', token).trim();
+    props.setProperty('GITHUB_TOKEN', token);
+    ui.alert('Collegato!', 'Il programma ora viene letto direttamente dal repository (versione ' + versione.slice(0, 7) + ').\n'
+      + 'Apri il gestionale per controllare che funzioni: da quel momento puoi rendere privato il repository.', ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Token non salvato', 'Verifica non riuscita: ' + e.message, ui.ButtonSet.OK);
+  }
+}
+
+/** Menu del foglio: dimentica la copia in memoria, così si legge subito l'ultima versione. */
+function aggiornaProgramma() {
+  CacheService.getScriptCache().remove('gh_versione');
+  try { SpreadsheetApp.getUi().alert('Fatto: alla prossima apertura il gestionale userà l\'ultima versione pubblicata.'); } catch (e) { /* senza interfaccia */ }
+}
+
+/* ======================================================================
+ * Prenotazioni Jasper: riepiloghi degli export e promemoria
+ * ==================================================================== */
+
+var MAX_RIEPILOGHI_JASPER = 60;
+var PROMEMORIA_GIORNO = 2;      // martedì (0 = domenica)
+var PROMEMORIA_ORA = 18;
+var PROMEMORIA_MINUTI = 15;
+var PROMEMORIA_OGNI_GIORNI = 14;
+
+function getJasper_() {
+  var righe = readAll_('RiepiloghiJasper').map(strip_);
+  var props = PropertiesService.getScriptProperties();
+  return {
+    riepiloghi: righe.slice(-MAX_RIEPILOGHI_JASPER).reverse(),
+    promemoria: props.getProperty('PROMEMORIA_JASPER') || ''
+  };
+}
+
+function saveRiepilogoJasper_(p, ctx) {
+  var dati = typeof p.dati === 'string' ? p.dati : JSON.stringify(p.dati || {});
+  if (dati.length > 45000) fail_('VALIDAZIONE', 'Riepilogo troppo grande per essere salvato.');
+  var id = nextIds_('RiepiloghiJasper', 1)[0];
+  var r = {
+    id: id, caricato_il: nowIso_(), operatore: ctx.operatore, file: str_(p.file, 200), data_report: str_(p.data_report, 10),
+    righe: String(Math.max(0, parseInt(p.righe, 10) || 0)), pezzi: String(Number(p.pezzi) || 0), contributo: String(Number(p.contributo) || 0),
+    dati: dati
+  };
+  appendRows_('RiepiloghiJasper', [r]);
+  log_(ctx, 'RiepiloghiJasper', id, 'caricamento_export', { file: r.file, righe: r.righe, pezzi: r.pezzi });
+  return r;
+}
+
+/** Prossimo martedì alle 18:15 (fuso dello script) successivo a "dopo". */
+function prossimoPromemoria_(dopo) {
+  var d = new Date(dopo.getTime());
+  d.setHours(PROMEMORIA_ORA, PROMEMORIA_MINUTI, 0, 0);
+  while (d.getDay() !== PROMEMORIA_GIORNO || d.getTime() <= dopo.getTime()) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(PROMEMORIA_ORA, PROMEMORIA_MINUTI, 0, 0);
+  }
+  return d;
+}
+
+function programmaPromemoria_(quando) {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'promemoriaJasper') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('promemoriaJasper').timeBased().at(quando).create();
+  PropertiesService.getScriptProperties().setProperty('PROMEMORIA_JASPER', quando.toISOString());
+}
+
+/** Menu del foglio: avvisa ogni due settimane, il martedì alle 18:15, sulla mail del proprietario. */
+function attivaPromemoriaJasper() {
+  var quando = prossimoPromemoria_(new Date());
+  programmaPromemoria_(quando);
+  var testo = 'Promemoria attivo: il primo arriverà ' + Utilities.formatDate(quando, Session.getScriptTimeZone(), "EEEE dd/MM 'alle' HH:mm")
+    + ' a ' + Session.getEffectiveUser().getEmail() + ', poi ogni due settimane.';
+  try { SpreadsheetApp.getUi().alert(testo); } catch (e) { Logger.log(testo); }
+}
+
+function disattivaPromemoriaJasper() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'promemoriaJasper') ScriptApp.deleteTrigger(t);
+  });
+  PropertiesService.getScriptProperties().deleteProperty('PROMEMORIA_JASPER');
+  try { SpreadsheetApp.getUi().alert('Promemoria disattivato.'); } catch (e) { /* senza interfaccia */ }
+}
+
+/** Eseguito dall'attivatore: invia la mail e programma il promemoria di due settimane dopo. */
+function promemoriaJasper() {
+  try { inviaPromemoriaJasper_(); } finally {
+    programmaPromemoria_(prossimoPromemoria_(new Date(Date.now() + (PROMEMORIA_OGNI_GIORNI - 1) * 864e5)));
+  }
+}
+
+function promemoriaJasperProva() {
+  var a = inviaPromemoriaJasper_();
+  try { SpreadsheetApp.getUi().alert('Promemoria di prova inviato a ' + a + '.'); } catch (e) { /* senza interfaccia */ }
+}
+
+function inviaPromemoriaJasper_() {
+  var a = Session.getEffectiveUser().getEmail();
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
+  var link = url ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'sezione=jasper' : '';
+  var ultimo = '';
+  try {
+    var r = readAll_('RiepiloghiJasper');
+    if (r.length) ultimo = r[r.length - 1].caricato_il;
+  } catch (e) { ultimo = ''; }
+  var quandoUltimo = ultimo ? Utilities.formatDate(new Date(ultimo), Session.getScriptTimeZone(), 'dd/MM/yyyy') : '';
+  var corpo = '<p>Ciao!</p><p>È il momento di scaricare l\'export <b>Prenotazioni premi</b> da Jasper '
+    + '(tutti gli stati, in formato CSV) e caricarlo nella sezione <b>Prenotazioni Jasper</b> del gestionale.</p>'
+    + (link ? '<p><a href="' + link + '">Apri la sezione Prenotazioni Jasper</a></p>' : '')
+    + (quandoUltimo ? '<p style="color:#64748b">Ultimo export caricato: ' + quandoUltimo + '.</p>' : '')
+    + '<p style="color:#64748b;font-size:12px">Messaggio automatico del Gestionale premi, ogni due settimane il martedì alle 18:15.</p>';
+  MailApp.sendEmail({ to: a, subject: 'Promemoria: export premi da Jasper', htmlBody: corpo, name: APP_NAME });
+  return a;
 }

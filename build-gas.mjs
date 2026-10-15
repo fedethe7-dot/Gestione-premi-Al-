@@ -70,12 +70,15 @@ const cssExtra = `
 
 /*
  * Il codice dell'app NON viene incollato in Apps Script (file enorme, che l'editor rovina):
- * Index.html è una pagina piccola che carica app.js e app.css da GitHub Pages.
- * Così, ogni volta che l'app si aggiorna su GitHub, la versione integrata si aggiorna da sola.
+ * Index.html è una pagina piccola. Se GitHub è collegato (menu del Foglio), è Code.gs a leggere
+ * app.js e app.css dal repository, anche privato, e a inserirli nella pagina; altrimenti questa
+ * pagina li carica da GitHub Pages. In entrambi i casi la versione integrata si aggiorna da sola.
  */
 const PAGES = 'https://fedethe7-dot.github.io/Gestione-premi-Al-/';
 const caricatore = `
 (function () {
+  // Programma già inserito nella pagina dal server (repository letto da Apps Script): niente da scaricare.
+  if (window.__PROGRAMMA_INCORPORATO__) return;
   var base = '${PAGES}';
   var v = Date.now().toString(36);
   var mostraErrore = function (testo) {
@@ -90,7 +93,10 @@ const caricatore = `
   var js = document.createElement('script');
   js.type = 'module';
   js.src = base + 'app.js?v=' + v;
-  js.onerror = function () { mostraErrore('Impossibile caricare il programma da ' + base + ' (controlla che GitHub Pages sia attivo).'); };
+  js.onerror = function () {
+    mostraErrore((window.__ERRORE_GITHUB__ ? window.__ERRORE_GITHUB__ + '<br>' : '')
+      + 'Impossibile caricare il programma da ' + base + '. Se il repository è privato, collega GitHub dal menu "Gestionale premi" del Foglio.');
+  };
   document.body.appendChild(js);
 })();
 `;

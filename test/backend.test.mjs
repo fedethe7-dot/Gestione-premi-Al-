@@ -305,3 +305,16 @@ test('database già in uso senza assegnazioni: la tabella si crea da sola, i dat
   ok(c3('getAll'));
   assert.equal(ok(c3('getAll')).causali.filter((c) => c.tipo === 'assegnazione').length, 2, 'la migrazione avviene una volta sola');
 });
+
+test('prenotazioni Jasper: riepiloghi salvati e letti, tabella creata da sola', () => {
+  const vuoto = ok(call('getJasper'));
+  assert.deepEqual(vuoto.riepiloghi, []);
+  assert.equal(vuoto.promemoria, '');
+  const r = ok(call('saveRiepilogoJasper', { file: 'export.csv', data_report: '2026-10-13', righe: 10, pezzi: 9, contributo: 12.5, dati: JSON.stringify({ premi: [['0406415', 'PADELLA', 3]], pdv: [['001', 9]], stati: {} }) }));
+  assert.equal(r.id, 'RJ-000001');
+  ok(call('saveRiepilogoJasper', { file: 'export2.csv', righe: 11, pezzi: 10, contributo: 0, dati: '{}' }));
+  const d = ok(call('getJasper'));
+  assert.deepEqual(d.riepiloghi.map((x) => x.file), ['export2.csv', 'export.csv'], 'dal più recente');
+  assert.equal(JSON.parse(d.riepiloghi[1].dati).premi[0][1], 'PADELLA');
+  ko(call('saveRiepilogoJasper', { file: 'grande.csv', dati: 'x'.repeat(46000) }), 'VALIDAZIONE');
+});

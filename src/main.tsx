@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  LuArrowRightLeft, LuChartColumn, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuMenu, LuPackagePlus, LuRefreshCw, LuSearch, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
+  LuArrowRightLeft, LuChartColumn, LuClipboardList, LuDownload, LuGift, LuHistory, LuLayoutDashboard, LuMenu, LuPackagePlus, LuRefreshCw, LuSearch, LuSettings, LuStore, LuTriangleAlert, LuUndo2,
 } from 'react-icons/lu';
 import { Rotella } from './components/comuni.tsx';
 import { dataOraIt } from './lib/format.ts';
@@ -11,6 +11,7 @@ import { PaginaCataloghi } from './pages/Cataloghi.tsx';
 import { PaginaDashboard } from './pages/Dashboard.tsx';
 import { PaginaEsportazioni } from './pages/Esportazioni.tsx';
 import { PaginaImpostazioni } from './pages/Impostazioni.tsx';
+import { PaginaJasper } from './pages/Jasper.tsx';
 import { PaginaNuovaOperazione } from './pages/NuovaOperazione.tsx';
 import { PaginaPdv } from './pages/PuntiVendita.tsx';
 import { PaginaRicercaPremi } from './pages/RicercaPremi.tsx';
@@ -29,6 +30,7 @@ const VOCI = [
   { path: 'pdv', titolo: 'Punti vendita', icona: LuStore },
   { path: 'cataloghi', titolo: 'Cataloghi premi', icona: LuGift },
   { path: 'statistiche', titolo: 'Statistiche', icona: LuChartColumn },
+  { path: 'jasper', titolo: 'Prenotazioni Jasper', icona: LuClipboardList },
   { path: 'esportazioni', titolo: 'Esportazioni e backup', icona: LuDownload },
   { path: 'impostazioni', titolo: 'Impostazioni', icona: LuSettings },
 ];
@@ -81,6 +83,7 @@ function App() {
       case 'pdv': contenuto = <PaginaPdv />; break;
       case 'cataloghi': contenuto = <PaginaCataloghi />; break;
       case 'statistiche': contenuto = <PaginaStatistiche />; break;
+      case 'jasper': contenuto = <PaginaJasper />; break;
       case 'esportazioni': contenuto = <PaginaEsportazioni />; break;
       default: contenuto = <PaginaDashboard />;
     }

@@ -9,7 +9,7 @@
     "dev": "node build.mjs --dev",
     "emulatore": "node emulatore/server.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test test/backend.test.mjs test/logica.test.ts test/listino.test.ts",
+    "test": "node --test test/backend.test.mjs test/logica.test.ts test/listino.test.ts test/jasper.test.ts",
     "build:gas": "node build-gas.mjs"
   },
   "dependencies": {

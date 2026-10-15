@@ -41,6 +41,7 @@ Funziona **dal browser, senza installare nulla sul PC** (pensata anche per PC az
 | **Punti vendita** | Archivio con codice univoco, nome, indirizzo, città, due e-mail (con controllo del formato), note, attivo/non attivo; importazione ed esportazione CSV |
 | **Cataloghi premi** | Cataloghi 2025/2026 e 2026/2027 separati (vuoti all'inizio), aggiunta di nuove stagioni; premi con codice, descrizione, categoria, note, stato; importazione/esportazione CSV per catalogo |
 | **Statistiche** | Generali, per PDV e per premio con filtri per periodo, catalogo, premio, PDV e tipo di movimento; andamento mensile, confronto tra stagioni, causali, classifiche; esportazione CSV dei dati aggregati |
+| **Prenotazioni Jasper** | Si carica l'export "Prenotazioni premi" di Jasper (CSV o .xlsx, tutti gli stati): classifiche di premi e negozi (pezzi o contributo), andamento mensile per stato, tabella mese × negozio/premio, prenotazioni aperte da troppo tempo, tempi di chiusura, donazioni a parte, tessere con più prenotazioni, controllo automatico con la riga "Totali" del report, confronto con l'export precedente. **Il file viene letto solo nel browser**: nel Foglio finisce solo un riepilogo (totali per premio e negozio, mai tessere o codici prenotazione) |
 | **Esportazioni e backup** | Tutti i CSV, copia di sicurezza su Google Drive, backup completo scaricabile (.json) e ripristino |
 | **Impostazioni** | Collegamento al database, nome operatore, separatore CSV, gestione delle causali |
 
@@ -390,3 +391,22 @@ Se il Foglio è su un account Google **aziendale** e nella distribuzione non com
 4. Apri l'indirizzo `/exec`: si apre direttamente il gestionale, senza token né impostazioni di collegamento.
 
 `apps-script/Index.html` si rigenera con `npm run build && npm run build:gas`.
+
+
+---
+
+## Aggiornamento ottobre 2026: Prenotazioni Jasper, promemoria e repository privato
+
+### Prenotazioni Jasper
+Nuova voce di menu. Ogni caricamento salva nel foglio **RiepiloghiJasper** (creato da solo) i totali dell'export, usati per il confronto con quello successivo. Le righe dell'export, con i numeri di tessera, non lasciano mai il PC.
+
+### Promemoria ogni due settimane
+Dal menu **Gestionale premi** del Foglio: *Attiva promemoria export Jasper*. Arriva una mail all'account proprietario dello script **un martedì sì e uno no alle 18:15**, con il link diretto alla sezione (`…/exec?sezione=jasper`). Giorno e ora si cambiano in `Code.gs` (`PROMEMORIA_GIORNO`, `PROMEMORIA_ORA`, `PROMEMORIA_MINUTI`). *Invia ora un promemoria di prova* serve per controllare che arrivi.
+
+### Repository GitHub privato
+La versione integrata può leggere il programma direttamente dal repository, anche privato, senza GitHub Pages:
+1. Su GitHub: **Settings › Developer settings › Personal access tokens › Fine-grained tokens › Generate new token**. Repository access: *Only select repositories* › questo repository. Permissions › Repository › **Contents: Read-only**. Copia il token.
+2. Nel Foglio: menu **Gestionale premi › Collega GitHub (repository privato)…** e incolla il token. Viene verificato subito.
+3. Apri il gestionale e controlla che funzioni. Solo a quel punto rendi privato il repository (**Settings › General › Danger Zone › Change visibility**).
+
+Il server Google legge `docs/app.js` e `docs/app.css` dall'ultima versione di `main` e li tiene in memoria per qualche ora: dopo un aggiornamento, *Aggiorna il programma ora* lo fa usare subito. Senza token, tutto funziona come prima (caricamento da GitHub Pages).

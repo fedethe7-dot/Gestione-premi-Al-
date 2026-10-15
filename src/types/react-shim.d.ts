@@ -94,6 +94,8 @@ declare module 'react-icons/lu' {
   export const LuEraser: Icon; export const LuPackage: Icon; export const LuPackagePlus: Icon; export const LuWarehouse: Icon; export const LuCircleCheck: Icon; export const LuCircleAlert: Icon;
   export const LuArrowLeftRight: Icon; export const LuFilter: Icon; export const LuExternalLink: Icon;
   export const LuCopy: Icon; export const LuFileSpreadsheet: Icon; export const LuSearchCheck: Icon; export const LuMenu: Icon;
+  export const LuClipboardList: Icon; export const LuBell: Icon; export const LuClock: Icon; export const LuFileUp: Icon;
+  export const LuHeartHandshake: Icon; export const LuTrendingUp: Icon; export const LuTrendingDown: Icon; export const LuTrophy: Icon;
 }
 
 declare const __APP_VERSION__: string;

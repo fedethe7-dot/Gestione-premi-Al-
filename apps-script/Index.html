@@ -56,6 +56,8 @@
 </script>
 <script>
 (function () {
+  // Programma già inserito nella pagina dal server (repository letto da Apps Script): niente da scaricare.
+  if (window.__PROGRAMMA_INCORPORATO__) return;
   var base = 'https://fedethe7-dot.github.io/Gestione-premi-Al-/';
   var v = Date.now().toString(36);
   var mostraErrore = function (testo) {
@@ -70,7 +72,10 @@
   var js = document.createElement('script');
   js.type = 'module';
   js.src = base + 'app.js?v=' + v;
-  js.onerror = function () { mostraErrore('Impossibile caricare il programma da ' + base + ' (controlla che GitHub Pages sia attivo).'); };
+  js.onerror = function () {
+    mostraErrore((window.__ERRORE_GITHUB__ ? window.__ERRORE_GITHUB__ + '<br>' : '')
+      + 'Impossibile caricare il programma da ' + base + '. Se il repository è privato, collega GitHub dal menu "Gestionale premi" del Foglio.');
+  };
   document.body.appendChild(js);
 })();
 </script>
