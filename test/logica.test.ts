@@ -159,3 +159,11 @@ test('mail del trasferimento: negozio che riceve, quantità, codice e descrizion
   assert.match(testoMailTrasferimento({ ...d, quantita: 12 }), / - 12pz - /);
   assert.equal(oggettoMailTrasferimento(d), 'Trasferimento premio cod. 0406397 per 038 PIOVE DI SACCO');
 });
+
+test("mail dell'assegnazione: quantità, premio e codice assegnati", async () => {
+  const { testoMailAssegnazione, oggettoMailAssegnazione } = await import('../src/lib/operazioni.ts');
+  const d = { quantita: '1', premioCodice: '0406407', premioDescrizione: 'MACINA SALE E PEPE' };
+  assert.equal(testoMailAssegnazione(d),
+    'Ciao, come da accordi, ho assegnato 1pz MACINA SALE E PEPE cod 0406407 per CF (inserisco io in seguito la carta fedeltà)\n\nGrazie e buon lavoro');
+  assert.equal(oggettoMailAssegnazione(d), 'Assegnazione premio cod. 0406407 - MACINA SALE E PEPE');
+});

@@ -3,13 +3,13 @@ import { LuArrowLeftRight, LuEraser, LuLink, LuWarehouse } from 'react-icons/lu'
 import { ApiError, messaggioErrore } from '../lib/api.ts';
 import { leggiPref, salvaPref } from '../lib/config.ts';
 import { dataIt, num, oggiIso } from '../lib/format.ts';
-import { nomeTipo, raccoltaDi, unTipo } from '../lib/operazioni.ts';
+import { nomeTipo, oggettoMailAssegnazione, oggettoMailTrasferimento, raccoltaDi, testoMailAssegnazione, testoMailTrasferimento, unTipo } from '../lib/operazioni.ts';
 import type { Assegnazione, Reso, TipoOperazione, Trasferimento } from '../lib/types.ts';
 import { useDati } from '../state/dati.tsx';
 import { useUi } from '../state/ui.tsx';
 import { Combobox, type Opzione } from './Combobox.tsx';
 import { Campo } from './comuni.tsx';
-import { MailTrasferimento } from './MailTrasferimento.tsx';
+import { MailOperazione } from './MailOperazione.tsx';
 
 interface Valori {
   catalogo_id: string; data: string; premio_id: string; quantita: string; causale: string; riferimento: string; note: string;
@@ -69,8 +69,8 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
   const premioRef = useRef<HTMLInputElement | null>(null);
   const primoRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
-  /** Ultimo trasferimento registrato: per preparare la mail al PDV di origine. */
-  const [perMail, setPerMail] = useState<Trasferimento | null>(null);
+  /** Ultimo trasferimento o assegnazione registrato: per preparare la mail al punto vendita. */
+  const [perMail, setPerMail] = useState<Trasferimento | Assegnazione | null>(null);
 
   const set = <K extends keyof Valori>(k: K, val: Valori[K]) => {
     setV((x) => ({ ...x, [k]: val }));
@@ -208,7 +208,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
           ?? (mantieni ? premioRef.current : primoRef.current);
         setTimeout(() => prossimo()?.focus(), 0);
       }
-      if (tipo === 'trasferimento' && !modifica) setPerMail(r as Trasferimento);
+      if (tipo !== 'reso' && !modifica) setPerMail(r as Trasferimento | Assegnazione);
       onSalvato?.(r);
     } catch (e) {
       const campi = e instanceof ApiError ? (e.details as { campi?: Record<string, string> } | null)?.campi : undefined;
@@ -343,17 +343,18 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
       </div>
 
       {perMail && (() => {
-        const origine = mappe.pdv.get(perMail.pdv_origine_id);
-        const dest = mappe.pdv.get(perMail.pdv_destinazione_id);
-        return (
-          <MailTrasferimento id={perMail.id} onChiudi={() => setPerMail(null)}
-            origine={[perMail.pdv_origine_codice, perMail.pdv_origine_nome].filter(Boolean).join(' ')}
-            destinatari={[origine?.email, origine?.email2].filter((x): x is string => Boolean(x))}
-            dati={{
-              pdvDestCodice: dest?.codice ?? perMail.pdv_destinazione_codice, pdvDestNome: dest?.nome ?? perMail.pdv_destinazione_nome,
-              quantita: perMail.quantita, premioCodice: perMail.premio_codice, premioDescrizione: perMail.premio_descrizione,
-            }} />
-        );
+        const premio = { quantita: perMail.quantita, premioCodice: perMail.premio_codice, premioDescrizione: perMail.premio_descrizione };
+        const email = (id: string) => { const p = mappe.pdv.get(id); return [p?.email, p?.email2].filter((x): x is string => Boolean(x)); };
+        if ('pdv_origine_id' in perMail) {
+          // Trasferimento: la mail va al PDV di origine, che deve spedire al PDV di destinazione.
+          const dest = mappe.pdv.get(perMail.pdv_destinazione_id);
+          const d = { ...premio, pdvDestCodice: dest?.codice ?? perMail.pdv_destinazione_codice, pdvDestNome: dest?.nome ?? perMail.pdv_destinazione_nome };
+          return <MailOperazione id={perMail.id} onChiudi={() => setPerMail(null)} testo={testoMailTrasferimento(d)} oggetto={oggettoMailTrasferimento(d)}
+            pdv={[perMail.pdv_origine_codice, perMail.pdv_origine_nome].filter(Boolean).join(' ')} destinatari={email(perMail.pdv_origine_id)} />;
+        }
+        // Assegnazione: la mail va al PDV che riceve il premio dal magazzino.
+        return <MailOperazione id={perMail.id} onChiudi={() => setPerMail(null)} testo={testoMailAssegnazione(premio)} oggetto={oggettoMailAssegnazione(premio)}
+          pdv={[perMail.pdv_codice, perMail.pdv_nome].filter(Boolean).join(' ')} destinatari={email(perMail.pdv_id)} />;
       })()}
     </form>
   );

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { LuBan, LuCheck, LuMail, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
-import { copiaTesto } from '../components/MailTrasferimento.tsx';
+import { copiaTesto } from '../components/MailOperazione.tsx';
 import { FormOperazione } from '../components/FormOperazione.tsx';
 import { Intestazione, StatoBadge, Vuoto } from '../components/comuni.tsx';
 import { dataIt, dataOraIt, num, oggiIso } from '../lib/format.ts';
-import { descriviPdv, testoMailTrasferimento } from '../lib/operazioni.ts';
+import { descriviPdv, testoMailOperazione } from '../lib/operazioni.ts';
 import type { TipoOperazione } from '../lib/types.ts';
 import { useAzioniOperazione } from '../state/azioni.tsx';
 import { useDati } from '../state/dati.tsx';
@@ -52,9 +52,9 @@ export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; 
               </div>
               <div className="mt-1 flex items-center justify-between">
                 <StatoBadge stato={o.stato} />
-                {o.tipo === 'trasferimento' && o.stato === 'valido' && (
-                  <button className="btn-testo ml-auto px-1.5 py-0.5 text-xs" title="Copia il testo della mail per il PDV di origine"
-                    onClick={async () => { if (await copiaTesto(testoMailTrasferimento(o))) { setCopiata(o.id); setTimeout(() => setCopiata((c) => (c === o.id ? '' : c)), 2500); } }}>
+                {o.tipo !== 'reso' && o.stato === 'valido' && (
+                  <button className="btn-testo ml-auto px-1.5 py-0.5 text-xs" title={o.tipo === 'trasferimento' ? 'Copia il testo della mail per il PDV di origine' : 'Copia il testo della mail per il PDV che riceve'}
+                    onClick={async () => { if (await copiaTesto(testoMailOperazione(o))) { setCopiata(o.id); setTimeout(() => setCopiata((c) => (c === o.id ? '' : c)), 2500); } }}>
                     {copiata === o.id ? <><LuCheck /> Copiata</> : <><LuMail /> Mail</>}
                   </button>
                 )}

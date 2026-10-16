@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuCheck, LuCopy, LuExternalLink, LuMail, LuX } from 'react-icons/lu';
-import { oggettoMailTrasferimento, testoMailTrasferimento, type DatiMail } from '../lib/operazioni.ts';
 
 /** Copia negli appunti; se il browser lo blocca, seleziona il testo e usa il comando classico. */
 export async function copiaTesto(testo: string, area?: HTMLTextAreaElement | null): Promise<boolean> {
@@ -13,13 +12,12 @@ export async function copiaTesto(testo: string, area?: HTMLTextAreaElement | nul
 }
 
 /**
- * Riquadro mostrato dopo aver registrato un trasferimento: testo della mail per il PDV di origine,
+ * Riquadro mostrato dopo aver registrato un trasferimento o un'assegnazione: testo della mail per il PDV,
  * da copiare e incollare in Gmail (oppure da aprire direttamente in Gmail già compilato).
  */
-export function MailTrasferimento({ id, dati, origine, destinatari, onChiudi }: {
-  id: string; dati: DatiMail; origine: string; destinatari: string[]; onChiudi: () => void;
+export function MailOperazione({ id, testo, oggetto, pdv, destinatari, onChiudi }: {
+  id: string; testo: string; oggetto: string; pdv: string; destinatari: string[]; onChiudi: () => void;
 }) {
-  const testo = testoMailTrasferimento(dati);
   const area = useRef<HTMLTextAreaElement | null>(null);
   const [copiato, setCopiato] = useState<'' | 'testo' | 'indirizzo'>('');
   useEffect(() => { setCopiato(''); }, [id]);
@@ -30,15 +28,15 @@ export function MailTrasferimento({ id, dati, origine, destinatari, onChiudi }: 
   };
   const gmail = 'https://mail.google.com/mail/?view=cm&fs=1'
     + (destinatari.length ? '&to=' + encodeURIComponent(destinatari.join(',')) : '')
-    + '&su=' + encodeURIComponent(oggettoMailTrasferimento(dati)) + '&body=' + encodeURIComponent(testo);
+    + '&su=' + encodeURIComponent(oggetto) + '&body=' + encodeURIComponent(testo);
 
   return (
-    <section className="mt-5 rounded-lg border border-brand-100 bg-brand-50/60 p-4" aria-label="Mail per il trasferimento">
+    <section className="mt-5 rounded-lg border border-brand-100 bg-brand-50/60 p-4" aria-label="Mail per il punto vendita">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
-          <h2 className="flex items-center gap-2 font-semibold"><LuMail /> Mail per {origine}</h2>
+          <h2 className="flex items-center gap-2 font-semibold"><LuMail /> Mail per {pdv}</h2>
           <p className="text-sm text-slate-600">
-            Trasferimento <span className="font-mono">{id}</span>
+            <span className="font-mono">{id}</span>
             {destinatari.length
               ? <> · a: <b className="select-all">{destinatari.join(', ')}</b></>
               : <> · nessuna e-mail salvata per questo punto vendita (si aggiunge in Punti vendita)</>}
@@ -46,7 +44,7 @@ export function MailTrasferimento({ id, dati, origine, destinatari, onChiudi }: 
         </div>
         <button type="button" className="btn-testo px-1.5 py-1" aria-label="Chiudi" onClick={onChiudi}><LuX /></button>
       </div>
-      <textarea ref={area} id="mail-trasferimento" readOnly rows={3} value={testo}
+      <textarea ref={area} id="mail-operazione" readOnly rows={testo.split("\n").length + 2} value={testo}
         className="input resize-y bg-white leading-relaxed" onFocus={(e) => e.currentTarget.select()} />
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" className="btn-primario" onClick={() => void copia('testo')}>

@@ -96,3 +96,27 @@ export function testoMailTrasferimento(d: DatiMail): string {
 export function oggettoMailTrasferimento(d: DatiMail): string {
   return `Trasferimento premio cod. ${String(d.premioCodice ?? '').trim()} per ${String(d.pdvDestCodice ?? '').trim()} ${String(d.pdvDestNome ?? '').trim()}`.trim();
 }
+
+/** Dati dell'assegnazione che servono per la mail al punto vendita che riceve. */
+export interface DatiMailAssegnazione { quantita: number | string; premioCodice: string; premioDescrizione: string }
+
+/**
+ * Testo della mail al PDV che riceve un'assegnazione dal magazzino, es.:
+ * "Ciao, come da accordi, ho assegnato 1pz MACINA SALE E PEPE cod 0406407 per CF (inserisco io in seguito la carta fedeltà)"
+ * Premio e codice sono quelli dell'assegnazione registrata.
+ */
+export function testoMailAssegnazione(d: DatiMailAssegnazione): string {
+  return `Ciao, come da accordi, ho assegnato ${Number(d.quantita) || 0}pz ${String(d.premioDescrizione ?? '').trim()} cod ${String(d.premioCodice ?? '').trim()}`
+    + ' per CF (inserisco io in seguito la carta fedeltà)\n\nGrazie e buon lavoro';
+}
+
+export function oggettoMailAssegnazione(d: DatiMailAssegnazione): string {
+  return `Assegnazione premio cod. ${String(d.premioCodice ?? '').trim()} - ${String(d.premioDescrizione ?? '').trim()}`;
+}
+
+/** Testo della mail per un'operazione dell'elenco (trasferimento o assegnazione); vuoto per i resi. */
+export function testoMailOperazione(o: Operazione): string {
+  if (o.tipo === 'trasferimento') return testoMailTrasferimento(o);
+  if (o.tipo === 'assegnazione') return testoMailAssegnazione({ quantita: o.quantita, premioCodice: o.premioCodice, premioDescrizione: o.premioDescrizione });
+  return '';
+}
