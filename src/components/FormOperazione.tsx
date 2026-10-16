@@ -9,6 +9,7 @@ import { useDati } from '../state/dati.tsx';
 import { useUi } from '../state/ui.tsx';
 import { Combobox, type Opzione } from './Combobox.tsx';
 import { Campo } from './comuni.tsx';
+import { MailTrasferimento } from './MailTrasferimento.tsx';
 
 interface Valori {
   catalogo_id: string; data: string; premio_id: string; quantita: string; causale: string; riferimento: string; note: string;
@@ -68,6 +69,8 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
   const premioRef = useRef<HTMLInputElement | null>(null);
   const primoRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  /** Ultimo trasferimento registrato: per preparare la mail al PDV di origine. */
+  const [perMail, setPerMail] = useState<Trasferimento | null>(null);
 
   const set = <K extends keyof Valori>(k: K, val: Valori[K]) => {
     setV((x) => ({ ...x, [k]: val }));
@@ -205,6 +208,7 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
           ?? (mantieni ? premioRef.current : primoRef.current);
         setTimeout(() => prossimo()?.focus(), 0);
       }
+      if (tipo === 'trasferimento' && !modifica) setPerMail(r as Trasferimento);
       onSalvato?.(r);
     } catch (e) {
       const campi = e instanceof ApiError ? (e.details as { campi?: Record<string, string> } | null)?.campi : undefined;
@@ -337,6 +341,20 @@ export function FormOperazione({ tipo, esistente, trasferimentoIniziale, onSalva
         )}
         {modifica && onAnnulla && <button type="button" className="btn-secondario" onClick={onAnnulla}>Annulla</button>}
       </div>
+
+      {perMail && (() => {
+        const origine = mappe.pdv.get(perMail.pdv_origine_id);
+        const dest = mappe.pdv.get(perMail.pdv_destinazione_id);
+        return (
+          <MailTrasferimento id={perMail.id} onChiudi={() => setPerMail(null)}
+            origine={[perMail.pdv_origine_codice, perMail.pdv_origine_nome].filter(Boolean).join(' ')}
+            destinatari={[origine?.email, origine?.email2].filter((x): x is string => Boolean(x))}
+            dati={{
+              pdvDestCodice: dest?.codice ?? perMail.pdv_destinazione_codice, pdvDestNome: dest?.nome ?? perMail.pdv_destinazione_nome,
+              quantita: perMail.quantita, premioCodice: perMail.premio_codice, premioDescrizione: perMail.premio_descrizione,
+            }} />
+        );
+      })()}
     </form>
   );
 }

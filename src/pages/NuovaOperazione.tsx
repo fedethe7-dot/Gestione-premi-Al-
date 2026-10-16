@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
-import { LuBan, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
+import { useMemo, useState } from 'react';
+import { LuBan, LuCheck, LuMail, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
+import { copiaTesto } from '../components/MailTrasferimento.tsx';
 import { FormOperazione } from '../components/FormOperazione.tsx';
 import { Intestazione, StatoBadge, Vuoto } from '../components/comuni.tsx';
 import { dataIt, dataOraIt, num, oggiIso } from '../lib/format.ts';
-import { descriviPdv } from '../lib/operazioni.ts';
+import { descriviPdv, testoMailTrasferimento } from '../lib/operazioni.ts';
 import type { TipoOperazione } from '../lib/types.ts';
 import { useAzioniOperazione } from '../state/azioni.tsx';
 import { useDati } from '../state/dati.tsx';
@@ -11,6 +12,7 @@ import { useDati } from '../state/dati.tsx';
 export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; params?: URLSearchParams }) {
   const { operazioni, cfg, magazzino, assegnazioniAttive } = useDati();
   const { annulla, ripristina } = useAzioniOperazione();
+  const [copiata, setCopiata] = useState('');
   const oggi = oggiIso();
   const recenti = useMemo(() => operazioni
     .filter((o) => o.tipo === tipo && oggiIso(new Date(o.creatoIl)) === oggi && (!cfg.operatore || o.creatoDa === cfg.operatore))
@@ -50,6 +52,12 @@ export function PaginaNuovaOperazione({ tipo, params }: { tipo: TipoOperazione; 
               </div>
               <div className="mt-1 flex items-center justify-between">
                 <StatoBadge stato={o.stato} />
+                {o.tipo === 'trasferimento' && o.stato === 'valido' && (
+                  <button className="btn-testo ml-auto px-1.5 py-0.5 text-xs" title="Copia il testo della mail per il PDV di origine"
+                    onClick={async () => { if (await copiaTesto(testoMailTrasferimento(o))) { setCopiata(o.id); setTimeout(() => setCopiata((c) => (c === o.id ? '' : c)), 2500); } }}>
+                    {copiata === o.id ? <><LuCheck /> Copiata</> : <><LuMail /> Mail</>}
+                  </button>
+                )}
                 {o.stato === 'valido'
                   ? <button className="btn-testo px-1.5 py-0.5 text-xs text-red-700" onClick={() => void annulla(o)}><LuBan /> Annulla</button>
                   : <button className="btn-testo px-1.5 py-0.5 text-xs" onClick={() => void ripristina(o)}><LuRotateCcw /> Ripristina</button>}

@@ -150,3 +150,12 @@ test('assegnazioni: unite allo storico ma escluse dalle statistiche tra PDV', as
   const t = totali(v);
   assert.equal(t.nResi, 0, 'un\'assegnazione non viene contata come reso');
 });
+
+test('mail del trasferimento: negozio che riceve, quantità, codice e descrizione come salvati', async () => {
+  const { testoMailTrasferimento, oggettoMailTrasferimento } = await import('../src/lib/operazioni.ts');
+  const d = { pdvDestCodice: '038', pdvDestNome: 'PIOVE DI SACCO', quantita: '1', premioCodice: '0406397', premioDescrizione: 'BICCHIERI DECORATI' };
+  assert.equal(testoMailTrasferimento(d),
+    'Ciao, vi chiedo cortesemente di inviare a 038 PIOVE DI SACCO - 1pz - cod. 0406397 - BICCHIERI DECORATI con bolla di trasferimento interno.\nGrazie e buon lavoro');
+  assert.match(testoMailTrasferimento({ ...d, quantita: 12 }), / - 12pz - /);
+  assert.equal(oggettoMailTrasferimento(d), 'Trasferimento premio cod. 0406397 per 038 PIOVE DI SACCO');
+});

@@ -75,3 +75,24 @@ export function descriviPdv(o: Operazione): string {
   if (o.tipo === 'reso') return o.pdvResoNome;
   return `${o.pdvOrigineNome} → ${o.pdvDestNome}`;
 }
+
+/** Dati del trasferimento che servono per la mail al punto vendita che spedisce. */
+export interface DatiMail {
+  pdvDestCodice: string; pdvDestNome: string; quantita: number | string; premioCodice: string; premioDescrizione: string;
+}
+
+/**
+ * Testo della mail da mandare al PDV di origine per chiedere la spedizione, es.:
+ * "Ciao, vi chiedo cortesemente di inviare a 038 PIOVE DI SACCO - 1pz - cod. 0406397 - BICCHIERI DECORATI con bolla di trasferimento interno."
+ * Negozio, codice e descrizione sono quelli salvati nel gestionale.
+ */
+export function testoMailTrasferimento(d: DatiMail): string {
+  const negozio = [d.pdvDestCodice, d.pdvDestNome].map((s) => String(s ?? '').trim()).filter(Boolean).join(' ');
+  return `Ciao, vi chiedo cortesemente di inviare a ${negozio} - ${Number(d.quantita) || 0}pz - cod. ${String(d.premioCodice ?? '').trim()}`
+    + ` - ${String(d.premioDescrizione ?? '').trim()} con bolla di trasferimento interno.\nGrazie e buon lavoro`;
+}
+
+/** Oggetto proposto per la mail. */
+export function oggettoMailTrasferimento(d: DatiMail): string {
+  return `Trasferimento premio cod. ${String(d.premioCodice ?? '').trim()} per ${String(d.pdvDestCodice ?? '').trim()} ${String(d.pdvDestNome ?? '').trim()}`.trim();
+}
