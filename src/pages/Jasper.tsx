@@ -180,7 +180,7 @@ function StoricoCaricamenti({ server, errore, prossimo }: { server: StatoServer 
               </ul>
             )}
       <p className="mt-3 flex items-center gap-1.5 text-sm text-slate-500"><LuBell />
-        {prossimo ? <>Prossimo promemoria via e-mail: <b className="text-slate-700">{prossimo}</b></> : 'Promemoria non attivo: si attiva dal menu "Gestionale premi" del Foglio.'}
+        {prossimo ? <>Prossimo controllo: <b className="text-slate-700">{prossimo}</b> · la mail arriva solo se l'ultimo export ha più di due settimane</> : 'Promemoria non attivo: si attiva dal menu "Gestionale premi" del Foglio.'}
       </p>
     </section>
   );
@@ -403,7 +403,7 @@ function Analisi({ exp, file, nomePdv, salvato, serverErrore, precedente, avvisa
 
       {server && (
         <p className="flex items-center gap-1.5 text-sm text-slate-500"><LuBell />
-          {prossimo ? <>Prossimo promemoria via e-mail: <b className="text-slate-700">{prossimo}</b></> : 'Promemoria non attivo: si attiva dal menu "Gestionale premi" del Foglio.'}
+          {prossimo ? <>Prossimo controllo: <b className="text-slate-700">{prossimo}</b> · la mail arriva solo se l'ultimo export ha più di due settimane</> : 'Promemoria non attivo: si attiva dal menu "Gestionale premi" del Foglio.'}
         </p>
       )}
     </>

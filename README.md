@@ -401,7 +401,7 @@ Se il Foglio è su un account Google **aziendale** e nella distribuzione non com
 Nuova voce di menu. Ogni caricamento salva nel foglio **RiepiloghiJasper** (creato da solo) i totali dell'export, usati per il confronto con quello successivo. Le righe dell'export, con i numeri di tessera, non lasciano mai il PC.
 
 ### Promemoria ogni due settimane
-Dal menu **Gestionale premi** del Foglio: *Attiva promemoria export Jasper*. Arriva una mail all'account proprietario dello script **un martedì sì e uno no alle 18:15**, con il link diretto alla sezione (`…/exec?sezione=jasper`). Giorno e ora si cambiano in `Code.gs` (`PROMEMORIA_GIORNO`, `PROMEMORIA_ORA`, `PROMEMORIA_MINUTI`). *Invia ora un promemoria di prova* serve per controllare che arrivi.
+Dal menu **Gestionale premi** del Foglio: *Attiva promemoria export Jasper*. Ogni **martedì alle 18:15** lo script controlla l'ultimo export caricato: se ha più di due settimane (`PROMEMORIA_SE_PIU_VECCHIO_DI`, 12 giorni di margine) arriva una mail all'account proprietario dello script con il link diretto alla sezione (`…/exec?sezione=jasper`), altrimenti non arriva niente. Se dopo la mail l'export non viene caricato, il martedì dopo arriva di nuovo. Giorno e ora si cambiano in `Code.gs` (`PROMEMORIA_GIORNO`, `PROMEMORIA_ORA`, `PROMEMORIA_MINUTI`). *Invia ora un promemoria di prova* serve per controllare che arrivi.
 
 ### Repository GitHub privato
 La versione integrata può leggere il programma direttamente dal repository, anche privato, senza GitHub Pages:

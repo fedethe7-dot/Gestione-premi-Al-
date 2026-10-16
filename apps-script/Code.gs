@@ -1353,6 +1353,9 @@ var PROMEMORIA_GIORNO = 2;      // martedì (0 = domenica)
 var PROMEMORIA_ORA = 18;
 var PROMEMORIA_MINUTI = 15;
 var PROMEMORIA_OGNI_GIORNI = 14;
+// Il controllo gira ogni martedì: la mail parte solo se l'ultimo export caricato ha
+// almeno questi giorni (margine per un caricamento fatto il mercoledì o il giovedì).
+var PROMEMORIA_SE_PIU_VECCHIO_DI = 12;
 
 function getJasper_() {
   var righe = readAll_('RiepiloghiJasper').map(strip_);
@@ -1396,12 +1399,12 @@ function programmaPromemoria_(quando) {
   PropertiesService.getScriptProperties().setProperty('PROMEMORIA_JASPER', quando.toISOString());
 }
 
-/** Menu del foglio: avvisa ogni due settimane, il martedì alle 18:15, sulla mail del proprietario. */
+/** Menu del foglio: ogni martedì alle 18:15 controlla e, se l'ultimo export ha più di due settimane, avvisa via mail. */
 function attivaPromemoriaJasper() {
   var quando = prossimoPromemoria_(new Date());
   programmaPromemoria_(quando);
   var testo = 'Promemoria attivo: il primo arriverà ' + Utilities.formatDate(quando, Session.getScriptTimeZone(), "EEEE dd/MM 'alle' HH:mm")
-    + ' a ' + Session.getEffectiveUser().getEmail() + ', poi ogni due settimane.';
+    + ' a ' + Session.getEffectiveUser().getEmail() + ', solo se nelle ultime due settimane non è stato caricato un export.';
   try { SpreadsheetApp.getUi().alert(testo); } catch (e) { Logger.log(testo); }
 }
 
@@ -1413,11 +1416,24 @@ function disattivaPromemoriaJasper() {
   try { SpreadsheetApp.getUi().alert('Promemoria disattivato.'); } catch (e) { /* senza interfaccia */ }
 }
 
-/** Eseguito dall'attivatore: invia la mail e programma il promemoria di due settimane dopo. */
+/** Eseguito dall'attivatore ogni martedì: manda la mail solo se l'export non è stato caricato da due settimane. */
 function promemoriaJasper() {
-  try { inviaPromemoriaJasper_(); } finally {
-    programmaPromemoria_(prossimoPromemoria_(new Date(Date.now() + (PROMEMORIA_OGNI_GIORNI - 1) * 864e5)));
+  try {
+    var ultimo = ultimoCaricamentoJasper_();
+    var giorni = ultimo ? (Date.now() - ultimo.getTime()) / 864e5 : Infinity;
+    if (giorni >= PROMEMORIA_SE_PIU_VECCHIO_DI) inviaPromemoriaJasper_();
+    else Logger.log('Promemoria Jasper non inviato: ultimo export caricato ' + Math.floor(giorni) + ' giorni fa.');
+  } finally {
+    programmaPromemoria_(prossimoPromemoria_(new Date()));
   }
+}
+
+function ultimoCaricamentoJasper_() {
+  try {
+    var r = readAll_('RiepiloghiJasper');
+    var d = r.length ? new Date(r[r.length - 1].caricato_il) : null;
+    return d && !isNaN(d.getTime()) ? d : null;
+  } catch (e) { return null; }
 }
 
 function promemoriaJasperProva() {
@@ -1430,17 +1446,13 @@ function inviaPromemoriaJasper_() {
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
   var link = url ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'sezione=jasper' : '';
-  var ultimo = '';
-  try {
-    var r = readAll_('RiepiloghiJasper');
-    if (r.length) ultimo = r[r.length - 1].caricato_il;
-  } catch (e) { ultimo = ''; }
-  var quandoUltimo = ultimo ? Utilities.formatDate(new Date(ultimo), Session.getScriptTimeZone(), 'dd/MM/yyyy') : '';
+  var ultimo = ultimoCaricamentoJasper_();
+  var quandoUltimo = ultimo ? Utilities.formatDate(ultimo, Session.getScriptTimeZone(), 'dd/MM/yyyy') : '';
   var corpo = '<p>Ciao!</p><p>È il momento di scaricare l\'export <b>Prenotazioni premi</b> da Jasper '
     + '(tutti gli stati, in formato CSV) e caricarlo nella sezione <b>Prenotazioni Jasper</b> del gestionale.</p>'
     + (link ? '<p><a href="' + link + '">Apri la sezione Prenotazioni Jasper</a></p>' : '')
     + (quandoUltimo ? '<p style="color:#64748b">Ultimo export caricato: ' + quandoUltimo + '.</p>' : '')
-    + '<p style="color:#64748b;font-size:12px">Messaggio automatico del Gestionale premi, ogni due settimane il martedì alle 18:15.</p>';
+    + '<p style="color:#64748b;font-size:12px">Messaggio automatico del Gestionale premi: arriva il martedì alle 18:15 se l\'ultimo export ha più di due settimane.</p>';
   MailApp.sendEmail({ to: a, subject: 'Promemoria: export premi da Jasper', htmlBody: corpo, name: APP_NAME });
   return a;
 }
