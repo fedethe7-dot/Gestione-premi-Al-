@@ -116,3 +116,31 @@ test('export CSV con separatore ; e numeri italiani', () => {
 test('file sbagliato: messaggio chiaro', () => {
   assert.throws(() => leggiExportJasper([['Codice PDV', 'Nome']]), /Codice Prenotazione/);
 });
+
+test('CSV con colonne vuote diverse tra la prima pagina e le successive', () => {
+  // Come l'export reale: prima pagina con 18 colonne, pagine successive con 16 (Pdv e Qta spostati).
+  const p1 = ['Data\napertura', 'Codice\nriordino', '', 'Codice\narticolo', '', 'Pdv', 'Articolo', 'Codice Prenotazione', 'Tessera',
+    'Tipo', 'Stato', 'Etic.', 'Chiusura\nStorno', '', 'Contributo', '', 'Qta', ''];
+  const p2 = ['Data\napertura', 'Codice\nriordino', '', 'Codice\narticolo', 'Pdv', 'Articolo', 'Codice Prenotazione', 'Tessera',
+    'Tipo', 'Stato', 'Etic.', 'Chiusura\nStorno', '', 'Contributo', 'Qta', ''];
+  const righe: ValoreCella[][] = [
+    ['Totali', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '13,00', '3', ''],
+    p1,
+    ['001 - PDV', '', '', '', '', '', '', '', '', '', '', '', '', '', '3,00', '', '1', ''],
+    ['09/09/2026', '0406428', '', '0406429', '', '001', 'CONTENITORE C/A', '9500000000001', '0499000000001', 'Prenotazione', 'Chiusa', 'Sì', '07/10/2026', '', '3,00', '', '1', ''],
+    p2,
+    ['20/11/2025', '0406450', '', '0406451', '056', 'FORNO MICROONDE C/A', '9500000000002', '0499000000002', 'Prenotazione', 'Chiusa', 'Sì', '30/11/2025', '', '10,00', '1', ''],
+    ['21/11/2025', '0406415', '', '0406415', '056', 'PADELLA 24 CM', '9500000000003', '0499000000002', 'ONLINE', 'Aperta', 'No', '', '', '0,00', '1', ''],
+  ];
+  const e = leggiExportJasper(righe);
+  assert.equal(e.righe.length, 3);
+  assert.equal(e.doppioni, 0, 'il numero di tessera non deve essere letto come codice prenotazione');
+  assert.equal(verificaTotali(e)?.ok, true);
+  const [, b, c] = e.righe;
+  assert.equal(b.pdv, '056');
+  assert.equal(b.codice, '9500000000002');
+  assert.equal(b.contributo, 10);
+  assert.equal(b.stato, 'chiusa');
+  assert.equal(c.tipo, 'Online');
+  assert.equal(c.stato, 'daetic');
+});

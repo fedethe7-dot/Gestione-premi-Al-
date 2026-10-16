@@ -92,17 +92,26 @@ export function leggiExportJasper(righe: ValoreCella[][]): ExportJasper {
     if ((righe[i] ?? []).some((c) => norm(c) === 'codice prenotazione')) { h = i; break; }
   }
   if (h < 0) throw new ErroreJasper('Non trovo la colonna "Codice Prenotazione": controlla che sia l\'export "Prenotazioni premi" di Jasper.');
-  const H = righe[h].map(norm);
-  const trova = (...nomi: string[]) => {
-    for (const n of nomi) { const i = H.findIndex((x) => x === n || x.startsWith(n)); if (i >= 0) return i; }
-    return -1;
+  // Jasper ripete l'intestazione a ogni pagina e non sempre con le stesse colonne vuote
+  // (es. 18 colonne nella prima pagina, 16 nelle successive): a ogni intestazione si
+  // ricalcola la posizione delle colonne.
+  const mappa = (riga: ValoreCella[]) => {
+    const H = riga.map(norm);
+    const trova = (...nomi: string[]) => {
+      for (const n of nomi) { const i = H.findIndex((x) => x === n || x.startsWith(n)); if (i >= 0) return i; }
+      return -1;
+    };
+    return {
+      H,
+      C: {
+        apertura: trova('data apertura'), riordino: trova('codice riordino'), pdv: trova('pdv', 'punto vendita'),
+        articolo: trova('articolo', 'descrizione'), codice: trova('codice prenotazione'), tessera: trova('tessera'),
+        tipo: trova('tipo'), stato: trova('stato'), etic: trova('etic'), chiusura: trova('chiusura'),
+        contributo: trova('contributo'), qta: trova('qta', 'q.tà', 'quantit'),
+      },
+    };
   };
-  const C = {
-    apertura: trova('data apertura'), riordino: trova('codice riordino'), pdv: trova('pdv', 'punto vendita'),
-    articolo: trova('articolo', 'descrizione'), codice: trova('codice prenotazione'), tessera: trova('tessera'),
-    tipo: trova('tipo'), stato: trova('stato'), etic: trova('etic'), chiusura: trova('chiusura'),
-    contributo: trova('contributo'), qta: trova('qta', 'q.tà', 'quantit'),
-  };
+  let { H, C } = mappa(righe[h]);
   // Le intestazioni unite di Excel possono spostare il valore nella colonna vuota accanto.
   const cella = (r: ValoreCella[], c: number): ValoreCella => {
     if (c < 0) return null;
@@ -130,6 +139,7 @@ export function leggiExportJasper(righe: ValoreCella[][]): ExportJasper {
       const k = r.findIndex((c) => norm(c).startsWith('report eseguito'));
       if (k >= 0) for (let j = k + 1; j < r.length; j++) { const g = giornoDa(r[j]); if (g !== null) { dataReport = g; break; } }
     }
+    if (r.some((c) => norm(c) === 'codice prenotazione')) { ({ H, C } = mappa(r)); continue; }
     const cod = cella(r, C.codice);
     if (cod === null) continue;
     const codice = typeof cod === 'number' ? String(Math.round(cod)) : String(cod).trim();
